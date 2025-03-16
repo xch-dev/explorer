@@ -28,6 +28,13 @@ impl<'a> Transaction<'a> {
             block.height.to_be_bytes(),
             pot::to_vec(block)?,
         );
+
+        self.batch.put_cf(
+            self.db.block_hash_cf(),
+            block.header_hash.as_ref(),
+            block.height.to_be_bytes(),
+        );
+
         Ok(())
     }
 

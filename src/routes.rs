@@ -4,8 +4,9 @@ use axum::{
     routing::get,
     Json, Router,
 };
+use chia::protocol::Bytes32;
 use rocksdb::Direction;
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 use tower_http::cors::{Any, CorsLayer};
 
 use crate::db::{BlockRow, Database};
@@ -15,49 +16,91 @@ pub struct App {
     pub db: Database,
 }
 
-pub fn router(state: App) -> Router {
+pub fn router(app: App) -> Router {
     let cors = CorsLayer::new()
         .allow_methods([Method::GET, Method::POST])
         .allow_origin(Any);
 
     Router::new()
-        .route("/block/{height}", get(block))
+        .route("/blocks/latest", get(latest_block))
+        .route("/blocks/height/{height}", get(block_by_height))
+        .route("/blocks/hash/{hash}", get(block_by_hash))
         .route("/blocks", get(blocks))
-        .with_state(state)
+        .route("/state", get(state))
+        .with_state(app)
         .layer(cors)
 }
 
-async fn block(
+async fn latest_block(State(app): State<App>) -> Result<Json<BlockRow>, StatusCode> {
+    let Some(height) = app.db.peak_height().unwrap() else {
+        return Err(StatusCode::NOT_FOUND);
+    };
+
+    let Some(block) = app.db.block(height).unwrap() else {
+        return Err(StatusCode::NOT_FOUND);
+    };
+
+    Ok(Json(block))
+}
+
+async fn block_by_height(
     State(app): State<App>,
     Path(height): Path<u32>,
 ) -> Result<Json<BlockRow>, StatusCode> {
     let Some(block) = app.db.block(height).unwrap() else {
         return Err(StatusCode::NOT_FOUND);
     };
+
+    Ok(Json(block))
+}
+
+async fn block_by_hash(
+    State(app): State<App>,
+    Path(hash): Path<Bytes32>,
+) -> Result<Json<BlockRow>, StatusCode> {
+    let Some(height) = app.db.block_height(hash).unwrap() else {
+        return Err(StatusCode::NOT_FOUND);
+    };
+
+    let Some(block) = app.db.block(height).unwrap() else {
+        return Err(StatusCode::NOT_FOUND);
+    };
+
     Ok(Json(block))
 }
 
 #[derive(Deserialize)]
-struct Pagination {
-    start: Option<u32>,
-    end: Option<u32>,
+pub struct BlocksRequest {
+    #[serde(default = "default_limit")]
+    pub limit: u32,
     #[serde(default)]
-    reverse: bool,
+    pub start: Option<u32>,
+    #[serde(default)]
+    pub reverse: bool,
+}
+
+fn default_limit() -> u32 {
+    50
+}
+
+#[derive(Serialize)]
+pub struct BlocksResponse {
+    pub blocks: Vec<BlockRow>,
 }
 
 async fn blocks(
     State(app): State<App>,
-    Query(pagination): Query<Pagination>,
-) -> Result<Json<Vec<BlockRow>>, StatusCode> {
-    let (start, end) = if pagination.reverse {
-        let end = pagination
-            .end
+    Query(query): Query<BlocksRequest>,
+) -> Result<Json<BlocksResponse>, StatusCode> {
+    let (start, end) = if query.reverse {
+        let end = query
+            .start
             .unwrap_or(app.db.peak_height().unwrap().unwrap_or(0));
-        let start = pagination.start.unwrap_or(end.saturating_sub(50));
+        let start = end.saturating_sub(query.limit);
         (start, end)
     } else {
-        let start = pagination.start.unwrap_or(0);
-        let end = pagination.end.unwrap_or(start + 50);
+        let start = query.start.unwrap_or(0);
+        let end = start + query.limit;
         (start, end)
     };
 
@@ -66,7 +109,7 @@ async fn blocks(
         .blocks_range(
             start,
             end,
-            if pagination.reverse {
+            if query.reverse {
                 Direction::Reverse
             } else {
                 Direction::Forward
@@ -74,5 +117,18 @@ async fn blocks(
         )
         .unwrap();
 
-    Ok(Json(blocks))
+    Ok(Json(BlocksResponse { blocks }))
+}
+
+#[derive(Serialize)]
+pub struct StateResponse {
+    pub peak_height: u32,
+}
+
+async fn state(State(app): State<App>) -> Result<Json<StateResponse>, StatusCode> {
+    let height = app.db.peak_height().unwrap().unwrap_or(0);
+
+    Ok(Json(StateResponse {
+        peak_height: height,
+    }))
 }

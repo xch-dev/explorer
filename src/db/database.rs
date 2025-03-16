@@ -24,6 +24,10 @@ impl Database {
                 prefix: None,
             },
             Column {
+                name: "block_hash",
+                prefix: None,
+            },
+            Column {
                 name: "coins",
                 prefix: None,
             },
@@ -111,6 +115,11 @@ impl Database {
         Ok(block
             .map(|bytes| pot::from_slice::<BlockRow>(&bytes))
             .transpose()?)
+    }
+
+    pub fn block_height(&self, hash: Bytes32) -> Result<Option<u32>> {
+        let height = self.0.get_cf(self.block_hash_cf(), hash.as_ref())?;
+        Ok(height.map(|bytes| u32::from_be_bytes(bytes.try_into().unwrap())))
     }
 
     pub fn blocks_range(
@@ -269,6 +278,10 @@ impl Database {
 
     pub(super) fn block_cf(&self) -> &ColumnFamily {
         self.0.cf_handle("blocks").unwrap()
+    }
+
+    pub(super) fn block_hash_cf(&self) -> &ColumnFamily {
+        self.0.cf_handle("block_hash").unwrap()
     }
 
     pub(super) fn coin_cf(&self) -> &ColumnFamily {
