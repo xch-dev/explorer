@@ -8,11 +8,14 @@ anyhow = "1.0.97"
 chia = "0.20.0"
 chia-traits = "0.20.0"
 chia-sha2 = "0.20.0"
-chia-wallet-sdk = "0.22.1"
+chia-wallet-sdk = { path = "../wallet-sdk", features = ["native-tls"] }
 chia_streamable_macro = "0.20.0"
 clvmr = "0.12.0"
 num_cpus = "1.16.0"
 rand = "0.9.0"
 rocksdb = "0.23.0"
-sqlx = { version = "0.8.3", features = ["runtime-tokio", "postgres", "bigdecimal"] }
+sqlx = { version = "0.8.3", features = ["runtime-tokio", "sqlite"] }
 tokio = { version = "1.44.1", features = ["full"] }
+zstd = "0.13.3"
+rayon = "1.10.0"
+chia-puzzles = "0.20.1"

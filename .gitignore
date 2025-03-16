@@ -1,2 +1,5 @@
 /target
 *.db
+*.key
+*.crt
+*.DS_Store
