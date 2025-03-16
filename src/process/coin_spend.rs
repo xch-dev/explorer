@@ -24,6 +24,7 @@ struct SpendState<'a> {
     coin_id: Bytes32,
     height: u32,
     insertions: &'a mut Vec<Insertion>,
+    additions: u32,
 }
 
 impl SpendState<'_> {
@@ -205,6 +206,8 @@ impl SpendState<'_> {
                     created_height: self.height,
                     reward: false,
                 });
+
+                self.additions += 1;
             }
         }
     }
@@ -228,7 +231,7 @@ pub fn process_coin_spend(
     coin_id: Bytes32,
     puzzle: NodePtr,
     solution: NodePtr,
-) {
+) -> u32 {
     let puzzle = Puzzle::parse(allocator, puzzle);
 
     let mut spend_state = SpendState {
@@ -236,9 +239,12 @@ pub fn process_coin_spend(
         coin_id,
         height,
         insertions,
+        additions: 0,
     };
 
     spend_state.parse(puzzle, solution);
+
+    let additions = spend_state.additions;
 
     let puzzle_reveal = node_to_bytes(allocator, puzzle.ptr()).unwrap();
     let solution = node_to_bytes(allocator, solution).unwrap();
@@ -249,4 +255,6 @@ pub fn process_coin_spend(
         solution,
         spent_height: height,
     });
+
+    additions
 }

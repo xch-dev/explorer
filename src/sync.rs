@@ -11,7 +11,7 @@ use sqlx::{Row, SqlitePool};
 use tracing::debug;
 use zstd::decode_all;
 
-use crate::db::{CatRow, CoinRow, CoinSpendRow, Database, SingletonRow, TransactionBlockRow};
+use crate::db::{CatRow, CoinRow, CoinSpendRow, Database, SingletonRow};
 use crate::parse_blocks;
 use crate::process::{process_blocks, Insertion};
 
@@ -120,7 +120,6 @@ impl Sync {
             let insert_start = Instant::now();
 
             let mut block_inserts = 0;
-            let mut transaction_block_inserts = 0;
             let mut coin_inserts = 0;
             let mut singleton_coin_inserts = 0;
             let mut cat_coin_inserts = 0;
@@ -131,30 +130,10 @@ impl Sync {
 
             for insertion in insertions {
                 match insertion {
-                    Insertion::Block {
-                        height,
-                        header_hash,
-                    } => {
-                        tx.put_block(height, header_hash)?;
+                    Insertion::Block { block } => {
+                        tx.put_block(&block)?;
 
                         block_inserts += 1;
-                    }
-                    Insertion::TransactionBlock {
-                        height,
-                        timestamp,
-                        fees,
-                        cost,
-                    } => {
-                        tx.put_transaction_block(
-                            height,
-                            &TransactionBlockRow {
-                                timestamp,
-                                fees,
-                                cost,
-                            },
-                        )?;
-
-                        transaction_block_inserts += 1;
                     }
                     Insertion::Coin {
                         coin,
@@ -258,9 +237,8 @@ impl Sync {
             );
 
             debug!(
-                "{} blocks, {} tx blocks, {} coins, {} singletons, {} cats, {} tails, {} spends",
+                "{} blocks, {} coins, {} singletons, {} cats, {} tails, {} spends",
                 block_inserts,
-                transaction_block_inserts,
                 coin_inserts,
                 singleton_coin_inserts,
                 cat_coin_inserts,

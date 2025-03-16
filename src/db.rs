@@ -5,12 +5,28 @@ use chia::protocol::{Bytes, Bytes32};
 use chia_streamable_macro::Streamable;
 use chia_traits::Streamable;
 use rocksdb::{ColumnFamily, ColumnFamilyDescriptor, MergeOperands, Options, WriteBatch, DB};
+use serde::{Deserialize, Serialize};
 
-#[derive(Streamable)]
-pub struct TransactionBlockRow {
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Streamable, Serialize, Deserialize)]
+pub struct BlockRow {
+    pub height: u32,
+    pub header_hash: Bytes32,
+    pub weight: u128,
+    pub total_iters: u128,
+    pub prev_block_hash: Bytes32,
+    pub farmer_puzzle_hash: Bytes32,
+    pub pool_puzzle_hash: Option<Bytes32>,
+    pub transaction_info: Option<TransactionInfo>,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Streamable, Serialize, Deserialize)]
+pub struct TransactionInfo {
     pub timestamp: u64,
     pub fees: u64,
     pub cost: u64,
+    pub additions: u32,
+    pub removals: u32,
+    pub prev_transaction_block_hash: Bytes32,
 }
 
 #[derive(Streamable)]
@@ -47,7 +63,7 @@ pub struct Database(Arc<DB>);
 
 pub struct Column {
     name: &'static str,
-    index: bool,
+    prefix: Option<usize>,
 }
 
 pub struct Transaction<'a> {
@@ -68,24 +84,11 @@ impl<'a> Transaction<'a> {
         Ok(())
     }
 
-    pub fn put_block(&mut self, height: u32, header_hash: Bytes32) -> Result<()> {
+    pub fn put_block(&mut self, block: &BlockRow) -> Result<()> {
         self.batch.put_cf(
             self.db.block_cf(),
-            height.to_be_bytes(),
-            header_hash.as_ref(),
-        );
-        Ok(())
-    }
-
-    pub fn put_transaction_block(
-        &mut self,
-        height: u32,
-        transaction_block: &TransactionBlockRow,
-    ) -> Result<()> {
-        self.batch.put_cf(
-            self.db.transaction_block_cf(),
-            height.to_be_bytes(),
-            transaction_block.to_bytes()?,
+            block.height.to_be_bytes(),
+            block.to_bytes()?,
         );
         Ok(())
     }
@@ -186,51 +189,47 @@ impl Database {
         let cf_names = [
             Column {
                 name: "blocks",
-                index: false,
-            },
-            Column {
-                name: "transaction_blocks",
-                index: false,
+                prefix: None,
             },
             Column {
                 name: "coins",
-                index: false,
+                prefix: None,
             },
             Column {
                 name: "singletons",
-                index: false,
+                prefix: None,
             },
             Column {
                 name: "cats",
-                index: false,
+                prefix: None,
             },
             Column {
                 name: "tails",
-                index: false,
+                prefix: None,
             },
             Column {
                 name: "coin_spends",
-                index: false,
+                prefix: None,
             },
             Column {
                 name: "puzzle_hash_index",
-                index: true,
-            },
-            Column {
-                name: "parent_coin_id_index",
-                index: true,
+                prefix: Some(32),
             },
             Column {
                 name: "hint_index",
-                index: true,
+                prefix: Some(32),
+            },
+            Column {
+                name: "parent_coin_id_index",
+                prefix: Some(32),
             },
             Column {
                 name: "created_height_index",
-                index: true,
+                prefix: Some(4),
             },
             Column {
                 name: "spent_height_index",
-                index: true,
+                prefix: Some(4),
             },
         ];
 
@@ -253,17 +252,18 @@ impl Database {
                 let mut cf_opts = Options::default();
 
                 // Optimize index column families
-                if column.index {
-                    cf_opts.set_prefix_extractor(rocksdb::SliceTransform::create_fixed_prefix(32));
+                if let Some(prefix) = column.prefix {
+                    cf_opts
+                        .set_prefix_extractor(rocksdb::SliceTransform::create_fixed_prefix(prefix));
                     cf_opts.set_memtable_prefix_bloom_ratio(0.1);
                 }
 
+                cf_opts.set_compression_type(rocksdb::DBCompressionType::Lz4);
+
                 // Use different settings for coin data vs indexes
-                if column.index {
+                if column.prefix.is_some() {
                     cf_opts.set_merge_operator_associative("test operator", concat_merge);
-                    cf_opts.set_compression_type(rocksdb::DBCompressionType::Lz4);
                 } else {
-                    cf_opts.set_compression_type(rocksdb::DBCompressionType::Lz4);
                     cf_opts.set_bottommost_compression_type(rocksdb::DBCompressionType::Zstd);
                 }
 
@@ -282,18 +282,9 @@ impl Database {
         Ok(height.map(|bytes| u32::from_be_bytes(bytes.try_into().unwrap())))
     }
 
-    pub fn block(&self, height: u32) -> Result<Option<Bytes32>> {
+    pub fn block(&self, height: u32) -> Result<Option<BlockRow>> {
         let block = self.0.get_cf(self.block_cf(), height.to_be_bytes())?;
-        Ok(block.map(|bytes| Bytes32::try_from(&bytes).unwrap()))
-    }
-
-    pub fn transaction_block(&self, height: u32) -> Result<Option<TransactionBlockRow>> {
-        let block = self
-            .0
-            .get_cf(self.transaction_block_cf(), height.to_be_bytes())?;
-        Ok(block
-            .map(|bytes| TransactionBlockRow::from_bytes(&bytes))
-            .transpose()?)
+        Ok(block.map(|bytes| BlockRow::from_bytes(&bytes).unwrap()))
     }
 
     pub fn coin(&self, coin_id: Bytes32) -> Result<Option<CoinRow>> {
@@ -401,10 +392,6 @@ impl Database {
 
     fn block_cf(&self) -> &ColumnFamily {
         self.0.cf_handle("blocks").unwrap()
-    }
-
-    fn transaction_block_cf(&self) -> &ColumnFamily {
-        self.0.cf_handle("transaction_blocks").unwrap()
     }
 
     fn coin_cf(&self) -> &ColumnFamily {

@@ -13,6 +13,8 @@ use chia_wallet_sdk::types::run_puzzle;
 use clvmr::{serde::node_from_bytes_backrefs, Allocator, NodePtr};
 use rayon::iter::{IntoParallelIterator, ParallelIterator};
 
+use crate::db::{BlockRow, TransactionInfo};
+
 use super::{process_coin_spend, Insertion};
 
 pub fn process_blocks(blocks: Vec<FullBlock>, refs: HashMap<u32, FullBlock>) -> Vec<Insertion> {
@@ -26,20 +28,6 @@ pub fn process_blocks(blocks: Vec<FullBlock>, refs: HashMap<u32, FullBlock>) -> 
 fn process_block(block: FullBlock, refs: &HashMap<u32, FullBlock>) -> Vec<Insertion> {
     let mut insertions = Vec::new();
 
-    insertions.push(Insertion::Block {
-        height: block.height(),
-        header_hash: block.header_hash(),
-    });
-
-    if let Some(info) = &block.transactions_info {
-        insertions.push(Insertion::TransactionBlock {
-            height: block.height(),
-            timestamp: block.foliage_transaction_block.as_ref().unwrap().timestamp,
-            fees: info.fees,
-            cost: info.cost,
-        });
-    }
-
     for coin in block.get_included_reward_coins() {
         insertions.push(Insertion::Coin {
             coin,
@@ -50,38 +38,71 @@ fn process_block(block: FullBlock, refs: &HashMap<u32, FullBlock>) -> Vec<Insert
         });
     }
 
-    let Some(generator_blob) = &block.transactions_generator else {
-        return insertions;
-    };
+    let mut additions = 0;
+    let mut removals = 0;
 
-    let mut allocator = Allocator::new();
+    if let Some(generator_blob) = &block.transactions_generator {
+        let mut allocator = Allocator::new();
 
-    let generator = node_from_bytes_backrefs(&mut allocator, generator_blob).unwrap();
+        let generator = node_from_bytes_backrefs(&mut allocator, generator_blob).unwrap();
 
-    let mut block_refs = Vec::new();
+        let mut block_refs = Vec::new();
 
-    for ref_block in &block.transactions_generator_ref_list {
-        let Some(ref_block) = refs.get(ref_block) else {
-            continue;
-        };
-        block_refs.push(ref_block.transactions_generator.as_deref().unwrap());
+        for ref_block in &block.transactions_generator_ref_list {
+            let Some(ref_block) = refs.get(ref_block) else {
+                continue;
+            };
+            block_refs.push(ref_block.transactions_generator.as_deref().unwrap());
+        }
+
+        let args = setup_generator_args(&mut allocator, block_refs).expect("setup_generator_args");
+        let result = run_puzzle(&mut allocator, generator, args).unwrap();
+        let spends = parse_spends(&allocator, result).unwrap();
+
+        for (parent, amount, puzzle, solution) in spends {
+            let puzzle_hash = tree_hash(&allocator, puzzle);
+
+            removals += 1;
+            additions += process_coin_spend(
+                &mut insertions,
+                &mut allocator,
+                block.height(),
+                Coin::new(parent, puzzle_hash.into(), amount).coin_id(),
+                puzzle,
+                solution,
+            );
+        }
     }
 
-    let args = setup_generator_args(&mut allocator, block_refs).expect("setup_generator_args");
-    let result = run_puzzle(&mut allocator, generator, args).unwrap();
-    let spends = parse_spends(&allocator, result).unwrap();
-
-    for (parent, amount, puzzle, solution) in spends {
-        let puzzle_hash = tree_hash(&allocator, puzzle);
-        process_coin_spend(
-            &mut insertions,
-            &mut allocator,
-            block.height(),
-            Coin::new(parent, puzzle_hash.into(), amount).coin_id(),
-            puzzle,
-            solution,
-        );
-    }
+    insertions.push(Insertion::Block {
+        block: Box::new(BlockRow {
+            height: block.height(),
+            header_hash: block.header_hash(),
+            weight: block.weight(),
+            total_iters: block.total_iters(),
+            farmer_puzzle_hash: block.foliage.foliage_block_data.farmer_reward_puzzle_hash,
+            pool_puzzle_hash: block
+                .reward_chain_block
+                .proof_of_space
+                .pool_contract_puzzle_hash,
+            prev_block_hash: block.prev_header_hash(),
+            transaction_info: if let (Some(tx_info), Some(tx_block)) = (
+                block.transactions_info.as_ref(),
+                block.foliage_transaction_block,
+            ) {
+                Some(TransactionInfo {
+                    timestamp: tx_block.timestamp,
+                    fees: tx_info.fees,
+                    cost: tx_info.cost,
+                    additions,
+                    removals,
+                    prev_transaction_block_hash: tx_block.prev_transaction_block_hash,
+                })
+            } else {
+                None
+            },
+        }),
+    });
 
     insertions
 }

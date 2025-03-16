@@ -2,17 +2,12 @@ use std::cmp::Ordering;
 
 use chia::protocol::{Bytes32, Coin};
 
+use crate::db::BlockRow;
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Insertion {
     Block {
-        height: u32,
-        header_hash: Bytes32,
-    },
-    TransactionBlock {
-        height: u32,
-        timestamp: u64,
-        fees: u64,
-        cost: u64,
+        block: Box<BlockRow>,
     },
     Coin {
         coin: Coin,
@@ -47,12 +42,11 @@ impl Insertion {
     fn order(&self) -> u8 {
         match self {
             Self::Block { .. } => 0,
-            Self::TransactionBlock { .. } => 1,
-            Self::Coin { .. } => 2,
-            Self::SingletonCoin { .. } => 3,
-            Self::CatCoin { .. } => 4,
-            Self::CatTail { .. } => 5,
-            Self::CoinSpend { .. } => 6,
+            Self::Coin { .. } => 1,
+            Self::SingletonCoin { .. } => 2,
+            Self::CatCoin { .. } => 3,
+            Self::CatTail { .. } => 4,
+            Self::CoinSpend { .. } => 5,
         }
     }
 }
