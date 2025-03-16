@@ -1,5 +1,6 @@
 mod db;
 mod process;
+mod routes;
 mod sync;
 
 use std::{fs, io::Cursor};
@@ -9,6 +10,7 @@ use chia::{protocol::FullBlock, traits::Streamable};
 use chia_wallet_sdk::coinset::FullNodeClient;
 use db::Database;
 use rayon::iter::{IntoParallelIterator, ParallelIterator};
+use routes::{router, App};
 use sqlx::SqlitePool;
 use sync::Sync;
 use tracing_subscriber::EnvFilter;
@@ -31,8 +33,13 @@ async fn main() -> Result<()> {
     let key = fs::read("private_daemon.key")?;
     let rpc = FullNodeClient::new(&cert, &key);
 
-    let sync = Sync::new(db, sqlite, rpc);
-    sync.start().await?;
+    let sync = Sync::new(db.clone(), sqlite, rpc);
+
+    tokio::spawn(async move { sync.start().await });
+
+    let app = router(App { db });
+    let listener = tokio::net::TcpListener::bind("0.0.0.0:3000").await?;
+    axum::serve(listener, app).await?;
 
     Ok(())
 }

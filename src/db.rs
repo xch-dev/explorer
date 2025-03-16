@@ -282,6 +282,20 @@ impl Database {
         Ok(height.map(|bytes| u32::from_be_bytes(bytes.try_into().unwrap())))
     }
 
+    pub fn block(&self, height: u32) -> Result<Option<Bytes32>> {
+        let block = self.0.get_cf(self.block_cf(), height.to_be_bytes())?;
+        Ok(block.map(|bytes| Bytes32::try_from(&bytes).unwrap()))
+    }
+
+    pub fn transaction_block(&self, height: u32) -> Result<Option<TransactionBlockRow>> {
+        let block = self
+            .0
+            .get_cf(self.transaction_block_cf(), height.to_be_bytes())?;
+        Ok(block
+            .map(|bytes| TransactionBlockRow::from_bytes(&bytes))
+            .transpose()?)
+    }
+
     pub fn coin(&self, coin_id: Bytes32) -> Result<Option<CoinRow>> {
         Ok(self
             .0
