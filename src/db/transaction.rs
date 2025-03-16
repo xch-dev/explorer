@@ -26,14 +26,14 @@ impl<'a> Transaction<'a> {
         self.batch.put_cf(
             self.db.block_cf(),
             block.height.to_be_bytes(),
-            bincode::serialize(block)?,
+            pot::to_vec(block)?,
         );
         Ok(())
     }
 
     pub fn put_coin(&mut self, coin: &CoinRow) -> Result<()> {
         self.batch
-            .put_cf(self.db.coin_cf(), coin.coin_id, bincode::serialize(coin)?);
+            .put_cf(self.db.coin_cf(), coin.coin_id, pot::to_vec(coin)?);
 
         self.add_to_puzzle_hash_index(coin.puzzle_hash, coin.coin_id)?;
         self.add_to_parent_coin_id_index(coin.parent_coin_id, coin.coin_id)?;
@@ -53,11 +53,8 @@ impl<'a> Transaction<'a> {
     }
 
     pub fn put_coin_spend(&mut self, coin_id: Bytes32, coin_spend: &CoinSpendRow) -> Result<()> {
-        self.batch.put_cf(
-            self.db.coin_spend_cf(),
-            coin_id,
-            bincode::serialize(coin_spend)?,
-        );
+        self.batch
+            .put_cf(self.db.coin_spend_cf(), coin_id, pot::to_vec(coin_spend)?);
 
         self.add_to_spent_height_index(coin_spend.spent_height, coin_id)?;
 

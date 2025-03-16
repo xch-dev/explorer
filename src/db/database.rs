@@ -109,7 +109,7 @@ impl Database {
     pub fn block(&self, height: u32) -> Result<Option<BlockRow>> {
         let block = self.0.get_cf(self.block_cf(), height.to_be_bytes())?;
         Ok(block
-            .map(|bytes| bincode::deserialize::<BlockRow>(&bytes))
+            .map(|bytes| pot::from_slice::<BlockRow>(&bytes))
             .transpose()?)
     }
 
@@ -158,7 +158,7 @@ impl Database {
                 }
             }
 
-            result.push(bincode::deserialize::<BlockRow>(&value)?);
+            result.push(pot::from_slice::<BlockRow>(&value)?);
         }
 
         Ok(result)
@@ -168,7 +168,7 @@ impl Database {
         Ok(self
             .0
             .get_cf(self.coin_cf(), coin_id)?
-            .map(|bytes| bincode::deserialize::<CoinRow>(&bytes))
+            .map(|bytes| pot::from_slice::<CoinRow>(&bytes))
             .transpose()?)
     }
 

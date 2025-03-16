@@ -35,7 +35,11 @@ async fn main() -> Result<()> {
 
     let sync = Sync::new(db.clone(), sqlite, rpc);
 
-    tokio::spawn(async move { sync.start().await });
+    tokio::spawn(async move {
+        if let Err(error) = sync.start().await {
+            tracing::error!("Sync error: {}", error);
+        }
+    });
 
     let app = router(App { db });
     let listener = tokio::net::TcpListener::bind("0.0.0.0:3000").await?;
