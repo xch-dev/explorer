@@ -147,12 +147,12 @@ impl Database {
 
             match direction {
                 Direction::Forward => {
-                    if height > end_height {
+                    if height >= end_height {
                         break;
                     }
                 }
                 Direction::Reverse => {
-                    if height < start_height {
+                    if height <= start_height {
                         break;
                     }
                 }
