@@ -7,13 +7,10 @@ use chia::{
         run_block_generator::setup_generator_args,
         validation_error::{first, next, ValidationErr},
     },
-    protocol::{Coin, CoinSpend, FullBlock},
+    protocol::{Bytes32, Coin, FullBlock},
 };
 use chia_wallet_sdk::types::run_puzzle;
-use clvmr::{
-    serde::{node_from_bytes_backrefs, node_to_bytes},
-    Allocator, Atom, NodePtr,
-};
+use clvmr::{serde::node_from_bytes_backrefs, Allocator, NodePtr};
 use rayon::iter::{IntoParallelIterator, ParallelIterator};
 
 use super::{process_coin_spend, Insertion};
@@ -74,22 +71,17 @@ fn process_block(block: FullBlock, refs: &HashMap<u32, FullBlock>) -> Vec<Insert
     let result = run_puzzle(&mut allocator, generator, args).unwrap();
     let spends = parse_spends(&allocator, result).unwrap();
 
-    insertions.extend(
-        spends
-            .into_par_iter()
-            .map(|(parent, amount, puzzle, solution)| {
-                let parent_coin_info = parent.as_ref().try_into().unwrap();
-                let puzzle_hash = tree_hash(&allocator, puzzle);
-                let coin_spend = CoinSpend::new(
-                    Coin::new(parent_coin_info, puzzle_hash.into(), amount),
-                    node_to_bytes(&allocator, puzzle).unwrap().into(),
-                    node_to_bytes(&allocator, solution).unwrap().into(),
-                );
-                process_coin_spend(block.height(), coin_spend)
-            })
-            .flatten()
-            .collect::<Vec<_>>(),
-    );
+    for (parent, amount, puzzle, solution) in spends {
+        let puzzle_hash = tree_hash(&allocator, puzzle);
+        process_coin_spend(
+            &mut insertions,
+            &mut allocator,
+            block.height(),
+            Coin::new(parent, puzzle_hash.into(), amount),
+            puzzle,
+            solution,
+        );
+    }
 
     insertions
 }
@@ -97,13 +89,19 @@ fn process_block(block: FullBlock, refs: &HashMap<u32, FullBlock>) -> Vec<Insert
 fn parse_spends(
     a: &Allocator,
     generator_result: NodePtr,
-) -> Result<Vec<(Atom<'_>, u64, NodePtr, NodePtr)>, ValidationErr> {
+) -> Result<Vec<(Bytes32, u64, NodePtr, NodePtr)>, ValidationErr> {
     let mut iter = first(a, generator_result)?;
     let mut spends = Vec::new();
 
     while let Some((coin_spend, next)) = next(a, iter)? {
         iter = next;
-        spends.push(parse_coin_spend(a, coin_spend)?);
+        let (parent, amount, puzzle, solution) = parse_coin_spend(a, coin_spend)?;
+        spends.push((
+            parent.as_ref().try_into().unwrap(),
+            amount,
+            puzzle,
+            solution,
+        ));
     }
 
     Ok(spends)
