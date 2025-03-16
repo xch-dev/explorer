@@ -77,7 +77,7 @@ fn process_block(block: FullBlock, refs: &HashMap<u32, FullBlock>) -> Vec<Insert
             &mut insertions,
             &mut allocator,
             block.height(),
-            Coin::new(parent, puzzle_hash.into(), amount),
+            Coin::new(parent, puzzle_hash.into(), amount).coin_id(),
             puzzle,
             solution,
         );
