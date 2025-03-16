@@ -8,6 +8,7 @@ use chia::{protocol::FullBlock, traits::Streamable};
 use chia_wallet_sdk::coinset::{ChiaRpcClient, FullNodeClient};
 use rayon::iter::{IntoParallelIterator, ParallelIterator};
 use sqlx::{Row, SqlitePool};
+use tracing::debug;
 use zstd::decode_all;
 
 use crate::db::{CatRow, CoinRow, CoinSpendRow, Database, SingletonRow, TransactionBlockRow};
@@ -44,7 +45,7 @@ impl Sync {
 
         while sync_height < peak_height {
             if instant.elapsed().as_secs() > 60 {
-                println!("Resetting start time");
+                debug!("Resetting start time");
                 instant = Instant::now();
                 blocks_processed = 0;
             }
@@ -58,7 +59,7 @@ impl Sync {
                 let minutes = ((seconds_remaining % 3600.0) / 60.0).floor();
                 let seconds = seconds_remaining % 60.0;
 
-                println!(
+                debug!(
                     "Estimated time remaining: {}h {}m {}s ({} blocks at {:.1} blocks/sec)",
                     hours,
                     minutes,
@@ -244,19 +245,19 @@ impl Sync {
             sync_height += BATCH_SIZE;
             blocks_processed += BATCH_SIZE;
 
-            println!(
+            debug!(
                 "{} blocks processed in {:?}, with an average of {} per batch",
                 blocks_processed,
                 instant.elapsed(),
                 instant.elapsed().as_secs_f32() / (blocks_processed as f32 / BATCH_SIZE as f32)
             );
 
-            println!(
+            debug!(
                 "process: {:?}, insert: {:?}",
                 process_duration, insert_duration
             );
 
-            println!(
+            debug!(
                 "{} blocks, {} tx blocks, {} coins, {} singletons, {} cats, {} tails, {} spends",
                 block_inserts,
                 transaction_block_inserts,
@@ -267,7 +268,7 @@ impl Sync {
                 coin_spend_inserts
             );
 
-            println!("Synced to height {}\n", sync_height);
+            debug!("Synced to height {}\n", sync_height);
         }
 
         Ok(())

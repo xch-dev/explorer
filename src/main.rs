@@ -11,12 +11,13 @@ use db::Database;
 use rayon::iter::{IntoParallelIterator, ParallelIterator};
 use sqlx::SqlitePool;
 use sync::Sync;
+use tracing_subscriber::EnvFilter;
 use zstd::decode_all;
 
 #[tokio::main]
 async fn main() -> Result<()> {
     tracing_subscriber::fmt()
-        .with_max_level(tracing::Level::DEBUG)
+        .with_env_filter(EnvFilter::new("DEBUG,sqlx=off"))
         .with_target(false)
         .init();
 
