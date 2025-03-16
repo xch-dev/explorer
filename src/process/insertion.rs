@@ -1,8 +1,8 @@
 use std::cmp::Ordering;
 
-use chia::protocol::{Bytes32, Coin};
+use chia::protocol::Bytes32;
 
-use crate::db::BlockRow;
+use crate::db::{BlockRow, CoinRow};
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Insertion {
@@ -10,21 +10,7 @@ pub enum Insertion {
         block: Box<BlockRow>,
     },
     Coin {
-        coin: Coin,
-        hint: Option<Bytes32>,
-        memos: Option<Vec<u8>>,
-        created_height: u32,
-        reward: bool,
-    },
-    SingletonCoin {
-        coin_id: Bytes32,
-        launcher_id: Bytes32,
-        inner_puzzle_hash: Bytes32,
-    },
-    CatCoin {
-        coin_id: Bytes32,
-        asset_id: Bytes32,
-        inner_puzzle_hash: Bytes32,
+        coin: Box<CoinRow>,
     },
     CatTail {
         asset_id: Bytes32,
@@ -43,10 +29,8 @@ impl Insertion {
         match self {
             Self::Block { .. } => 0,
             Self::Coin { .. } => 1,
-            Self::SingletonCoin { .. } => 2,
-            Self::CatCoin { .. } => 3,
-            Self::CatTail { .. } => 4,
-            Self::CoinSpend { .. } => 5,
+            Self::CatTail { .. } => 2,
+            Self::CoinSpend { .. } => 3,
         }
     }
 }

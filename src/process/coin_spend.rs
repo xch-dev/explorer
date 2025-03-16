@@ -3,25 +3,26 @@ use chia::{
     protocol::{Bytes32, Coin, Program},
     puzzles::{
         cat::{CatArgs, CatSolution},
-        singleton::{LauncherSolution, SingletonArgs, SingletonSolution},
-        standard::{StandardArgs, StandardSolution},
+        singleton::{SingletonArgs, SingletonSolution},
     },
 };
-use chia_puzzles::{
-    CAT_PUZZLE_HASH, P2_DELEGATED_PUZZLE_OR_HIDDEN_PUZZLE_HASH, SINGLETON_LAUNCHER_HASH,
-    SINGLETON_TOP_LAYER_V1_1_HASH,
-};
+use chia_puzzles::{CAT_PUZZLE_HASH, SINGLETON_LAUNCHER_HASH, SINGLETON_TOP_LAYER_V1_1_HASH};
 use chia_wallet_sdk::{
     driver::Puzzle,
+    prelude::CreateCoin,
     types::{run_puzzle, Condition},
 };
 use clvmr::{serde::node_to_bytes, Allocator, NodePtr};
+use itertools::Itertools;
+
+use crate::db::{CoinRow, CoinType, LineageProof};
 
 use super::Insertion;
 
 struct SpendState<'a> {
     allocator: &'a mut Allocator,
     coin_id: Bytes32,
+    coin: Coin,
     height: u32,
     insertions: &'a mut Vec<Insertion>,
     additions: u32,
@@ -40,129 +41,96 @@ impl SpendState<'_> {
                 self.cat(puzzle, solution);
             }
             _ => {
-                let conditions = self.inner(puzzle, solution);
-                self.process_conditions(&conditions);
+                let conditions = self.conditions(puzzle.ptr(), solution);
+                let rows = self.coin_rows(&conditions);
+                self.insert_coin_rows(rows);
             }
         }
-    }
-
-    fn inner(&mut self, puzzle: Puzzle, solution: NodePtr) -> Vec<Condition> {
-        match puzzle.mod_hash().to_bytes() {
-            P2_DELEGATED_PUZZLE_OR_HIDDEN_PUZZLE_HASH => self.standard(puzzle, solution),
-            _ => self.conditions(puzzle.ptr(), solution),
-        }
-    }
-
-    #[must_use]
-    fn standard(&mut self, puzzle: Puzzle, solution: NodePtr) -> Vec<Condition> {
-        let Some(puzzle) = puzzle.as_curried() else {
-            return self.conditions(puzzle.ptr(), solution);
-        };
-
-        let args = StandardArgs::from_clvm(self.allocator, puzzle.args).unwrap();
-        let parsed_solution =
-            StandardSolution::<Puzzle, NodePtr>::from_clvm(self.allocator, solution).unwrap();
-
-        let mut conditions = self.inner(parsed_solution.delegated_puzzle, parsed_solution.solution);
-
-        conditions.insert(
-            0,
-            Condition::agg_sig_me(
-                args.synthetic_key,
-                parsed_solution
-                    .delegated_puzzle
-                    .curried_puzzle_hash()
-                    .to_vec()
-                    .into(),
-            ),
-        );
-
-        conditions
     }
 
     fn launcher(&mut self, puzzle: Puzzle, solution: NodePtr) {
-        let parsed_solution =
-            LauncherSolution::<NodePtr>::from_clvm(self.allocator, solution).unwrap();
-        let inner_puzzle_hash = parsed_solution.singleton_puzzle_hash;
+        let conditions = self.conditions(puzzle.ptr(), solution);
+        let mut rows = self.coin_rows(&conditions);
 
-        let conditions = self.top_level(puzzle, solution);
+        let launcher_id = self.coin_id;
+        let launcher = self.coin;
 
-        for condition in conditions {
-            if let Condition::CreateCoin(cond) = condition {
-                let eve_coin_id = Coin::new(self.coin_id, cond.puzzle_hash, cond.amount).coin_id();
-
-                self.insertions.push(Insertion::SingletonCoin {
-                    coin_id: eve_coin_id,
-                    launcher_id: self.coin_id,
-                    inner_puzzle_hash,
-                });
-            }
+        for row in &mut rows {
+            row.kind = CoinType::Singleton {
+                launcher_id,
+                lineage_proof: LineageProof {
+                    parent_parent_coin_id: launcher.parent_coin_info,
+                    parent_inner_puzzle_hash: None,
+                    parent_amount: launcher.amount,
+                },
+            };
         }
+
+        self.insert_coin_rows(rows);
     }
 
     fn singleton(&mut self, puzzle: Puzzle, solution: NodePtr) {
-        let Some(puzzle) = puzzle.as_curried() else {
-            self.top_level(puzzle, solution);
-            return;
-        };
+        let puzzle = puzzle.as_curried().unwrap();
 
-        let args = SingletonArgs::<Puzzle>::from_clvm(self.allocator, puzzle.args).unwrap();
-        let parsed_solution =
+        let singleton_args =
+            SingletonArgs::<Puzzle>::from_clvm(self.allocator, puzzle.args).unwrap();
+        let singleton_solution =
             SingletonSolution::<NodePtr>::from_clvm(self.allocator, solution).unwrap();
 
-        let conditions = self.inner(args.inner_puzzle, parsed_solution.inner_solution);
+        let lineage_proof = LineageProof {
+            parent_parent_coin_id: self.coin.parent_coin_info,
+            parent_inner_puzzle_hash: Some(
+                singleton_args.inner_puzzle.curried_puzzle_hash().into(),
+            ),
+            parent_amount: self.coin.amount,
+        };
 
-        for condition in conditions {
-            if let Condition::CreateCoin(mut cond) = condition {
-                if cond.amount % 2 != 1 {
-                    continue;
-                }
+        let conditions = self.conditions(
+            singleton_args.inner_puzzle.ptr(),
+            singleton_solution.inner_solution,
+        );
 
-                cond.puzzle_hash = SingletonArgs::curry_tree_hash(
-                    args.singleton_struct.launcher_id,
-                    cond.puzzle_hash.into(),
-                )
-                .into();
+        let mut rows = self.coin_rows(&conditions);
 
-                let coin_id = Coin::new(self.coin_id, cond.puzzle_hash, cond.amount).coin_id();
-
-                self.insertions.push(Insertion::SingletonCoin {
-                    coin_id,
-                    launcher_id: args.singleton_struct.launcher_id,
-                    inner_puzzle_hash: cond.puzzle_hash,
-                });
+        for row in &mut rows {
+            if row.amount % 2 != 1 {
+                continue;
             }
+
+            row.kind = CoinType::Singleton {
+                launcher_id: singleton_args.singleton_struct.launcher_id,
+                lineage_proof,
+            };
         }
 
-        let conditions = self.conditions(puzzle.curried_ptr, solution);
-        self.process_conditions(&conditions);
+        self.insert_coin_rows(rows);
     }
 
     fn cat(&mut self, puzzle: Puzzle, solution: NodePtr) {
-        let Some(puzzle) = puzzle.as_curried() else {
-            self.top_level(puzzle, solution);
-            return;
-        };
+        let puzzle = puzzle.as_curried().unwrap();
 
         let args = CatArgs::<Puzzle>::from_clvm(self.allocator, puzzle.args).unwrap();
         let parsed_solution = CatSolution::<NodePtr>::from_clvm(self.allocator, solution).unwrap();
 
-        let conditions = self.inner(args.inner_puzzle, parsed_solution.inner_puzzle_solution);
+        let conditions = self.conditions(
+            args.inner_puzzle.ptr(),
+            parsed_solution.inner_puzzle_solution,
+        );
+
+        let mut create_coins = Vec::new();
+        let mut inner_puzzle_hashes = Vec::new();
 
         for condition in conditions {
             match condition {
-                Condition::CreateCoin(mut cond) => {
-                    cond.puzzle_hash =
-                        CatArgs::curry_tree_hash(args.asset_id, cond.puzzle_hash.into()).into();
+                Condition::CreateCoin(cond) => {
+                    let coin = CreateCoin::<NodePtr>::new(
+                        CatArgs::curry_tree_hash(args.asset_id, cond.puzzle_hash.into()).into(),
+                        cond.amount,
+                        cond.memos,
+                    );
 
-                    let child_coin_id =
-                        Coin::new(self.coin_id, cond.puzzle_hash, cond.amount).coin_id();
-
-                    self.insertions.push(Insertion::CatCoin {
-                        coin_id: child_coin_id,
-                        asset_id: args.asset_id,
-                        inner_puzzle_hash: cond.puzzle_hash,
-                    });
+                    create_coins.push(coin);
+                    inner_puzzle_hashes.push(cond.puzzle_hash);
                 }
                 Condition::RunCatTail(cond) => {
                     let tail = node_to_bytes(self.allocator, cond.program).unwrap();
@@ -176,46 +144,69 @@ impl SpendState<'_> {
             }
         }
 
-        let conditions = self.conditions(puzzle.curried_ptr, solution);
-        self.process_conditions(&conditions);
-    }
+        let parent_parent_coin_id = self.coin.parent_coin_info;
+        let parent_amount = self.coin.amount;
 
-    fn process_conditions(&mut self, conditions: &[Condition]) {
-        for condition in conditions {
-            if let Condition::CreateCoin(cond) = condition {
-                let hint = if let Some(memos) = cond.memos {
-                    <(Bytes32, NodePtr)>::from_clvm(self.allocator, memos.value)
-                        .ok()
-                        .map(|(hint, _)| hint)
-                } else {
-                    None
-                };
+        let mut rows = self.coin_rows(&create_coins.into_iter().map(Condition::from).collect_vec());
 
-                let memos = cond
-                    .memos
-                    .map(|memos| Program::from_clvm(self.allocator, memos.value))
-                    .transpose()
-                    .ok()
-                    .flatten()
-                    .map(Program::into_bytes);
-
-                self.insertions.push(Insertion::Coin {
-                    coin: Coin::new(self.coin_id, cond.puzzle_hash, cond.amount),
-                    hint,
-                    memos,
-                    created_height: self.height,
-                    reward: false,
-                });
-
-                self.additions += 1;
-            }
+        for (i, row) in rows.iter_mut().enumerate() {
+            row.kind = CoinType::Cat {
+                asset_id: args.asset_id,
+                inner_puzzle_hash: inner_puzzle_hashes[i],
+                lineage_proof: LineageProof {
+                    parent_parent_coin_id,
+                    parent_inner_puzzle_hash: Some(args.inner_puzzle.curried_puzzle_hash().into()),
+                    parent_amount,
+                },
+            };
         }
+
+        self.insert_coin_rows(rows);
     }
 
-    fn top_level(&mut self, puzzle: Puzzle, solution: NodePtr) -> Vec<Condition> {
-        let conditions = self.conditions(puzzle.ptr(), solution);
-        self.process_conditions(&conditions);
-        conditions
+    fn coin_rows(&mut self, conditions: &[Condition]) -> Vec<CoinRow> {
+        let mut coins = Vec::new();
+
+        for cond in conditions.iter().filter_map(Condition::as_create_coin) {
+            let hint = if let Some(memos) = cond.memos {
+                <(Bytes32, NodePtr)>::from_clvm(self.allocator, memos.value)
+                    .ok()
+                    .map(|(hint, _)| hint)
+            } else {
+                None
+            };
+
+            let memos = cond
+                .memos
+                .map(|memos| Program::from_clvm(self.allocator, memos.value))
+                .transpose()
+                .ok()
+                .flatten()
+                .map(Program::into_inner);
+
+            coins.push(CoinRow {
+                coin_id: Coin::new(self.coin_id, cond.puzzle_hash, cond.amount).coin_id(),
+                parent_coin_id: self.coin_id,
+                puzzle_hash: cond.puzzle_hash,
+                amount: cond.amount,
+                created_height: self.height,
+                hint,
+                memos,
+                reward: false,
+                kind: CoinType::Unknown,
+            });
+        }
+
+        coins
+    }
+
+    fn insert_coin_rows(&mut self, coins: Vec<CoinRow>) {
+        for coin in coins {
+            self.insertions.push(Insertion::Coin {
+                coin: Box::new(coin),
+            });
+            self.additions += 1;
+        }
     }
 
     fn conditions(&mut self, puzzle: NodePtr, solution: NodePtr) -> Vec<Condition> {
@@ -228,15 +219,17 @@ pub fn process_coin_spend(
     insertions: &mut Vec<Insertion>,
     allocator: &mut Allocator,
     height: u32,
-    coin_id: Bytes32,
+    coin: Coin,
     puzzle: NodePtr,
     solution: NodePtr,
 ) -> u32 {
     let puzzle = Puzzle::parse(allocator, puzzle);
+    let coin_id = coin.coin_id();
 
     let mut spend_state = SpendState {
         allocator,
         coin_id,
+        coin,
         height,
         insertions,
         additions: 0,

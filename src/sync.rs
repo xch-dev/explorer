@@ -11,7 +11,7 @@ use sqlx::{Row, SqlitePool};
 use tracing::debug;
 use zstd::decode_all;
 
-use crate::db::{CatRow, CoinRow, CoinSpendRow, Database, SingletonRow};
+use crate::db::{CoinSpendRow, Database};
 use crate::parse_blocks;
 use crate::process::{process_blocks, Insertion};
 
@@ -121,8 +121,6 @@ impl Sync {
 
             let mut block_inserts = 0;
             let mut coin_inserts = 0;
-            let mut singleton_coin_inserts = 0;
-            let mut cat_coin_inserts = 0;
             let mut cat_tail_inserts = 0;
             let mut coin_spend_inserts = 0;
 
@@ -135,59 +133,10 @@ impl Sync {
 
                         block_inserts += 1;
                     }
-                    Insertion::Coin {
-                        coin,
-                        hint,
-                        created_height,
-                        memos,
-                        reward,
-                    } => {
-                        let coin_id = coin.coin_id();
-
-                        tx.put_coin(
-                            coin_id,
-                            &CoinRow {
-                                parent_coin_id: coin.parent_coin_info,
-                                puzzle_hash: coin.puzzle_hash,
-                                amount: coin.amount,
-                                created_height: Some(created_height),
-                                hint,
-                                memos: memos.map(Bytes::new),
-                                reward,
-                            },
-                        )?;
+                    Insertion::Coin { coin } => {
+                        tx.put_coin(&coin)?;
 
                         coin_inserts += 1;
-                    }
-                    Insertion::SingletonCoin {
-                        coin_id,
-                        launcher_id,
-                        inner_puzzle_hash,
-                    } => {
-                        tx.put_singleton(
-                            coin_id,
-                            &SingletonRow {
-                                launcher_id,
-                                inner_puzzle_hash,
-                            },
-                        )?;
-
-                        singleton_coin_inserts += 1;
-                    }
-                    Insertion::CatCoin {
-                        coin_id,
-                        asset_id,
-                        inner_puzzle_hash,
-                    } => {
-                        tx.put_cat(
-                            coin_id,
-                            &CatRow {
-                                asset_id,
-                                inner_puzzle_hash,
-                            },
-                        )?;
-
-                        cat_coin_inserts += 1;
                     }
                     Insertion::CatTail { asset_id, tail } => {
                         tx.put_tail(asset_id, &Bytes::new(tail))?;
@@ -203,6 +152,7 @@ impl Sync {
                         tx.put_coin_spend(
                             coin_id,
                             &CoinSpendRow {
+                                spent_height,
                                 puzzle_reveal: Bytes::new(puzzle_reveal),
                                 solution: Bytes::new(solution),
                             },
@@ -237,13 +187,8 @@ impl Sync {
             );
 
             debug!(
-                "{} blocks, {} coins, {} singletons, {} cats, {} tails, {} spends",
-                block_inserts,
-                coin_inserts,
-                singleton_coin_inserts,
-                cat_coin_inserts,
-                cat_tail_inserts,
-                coin_spend_inserts
+                "{} blocks, {} coins, {} tails, {} spends",
+                block_inserts, coin_inserts, cat_tail_inserts, coin_spend_inserts
             );
 
             debug!("Synced to height {}\n", sync_height);

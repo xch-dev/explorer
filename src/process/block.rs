@@ -13,7 +13,7 @@ use chia_wallet_sdk::types::run_puzzle;
 use clvmr::{serde::node_from_bytes_backrefs, Allocator, NodePtr};
 use rayon::iter::{IntoParallelIterator, ParallelIterator};
 
-use crate::db::{BlockRow, TransactionInfo};
+use crate::db::{BlockRow, CoinRow, CoinType, TransactionInfo};
 
 use super::{process_coin_spend, Insertion};
 
@@ -30,11 +30,17 @@ fn process_block(block: FullBlock, refs: &HashMap<u32, FullBlock>) -> Vec<Insert
 
     for coin in block.get_included_reward_coins() {
         insertions.push(Insertion::Coin {
-            coin,
-            hint: None,
-            memos: None,
-            created_height: block.height(),
-            reward: true,
+            coin: Box::new(CoinRow {
+                coin_id: coin.coin_id(),
+                parent_coin_id: coin.parent_coin_info,
+                puzzle_hash: coin.puzzle_hash,
+                amount: coin.amount,
+                created_height: block.height(),
+                reward: true,
+                hint: None,
+                memos: None,
+                kind: CoinType::Xch,
+            }),
         });
     }
 
@@ -67,7 +73,7 @@ fn process_block(block: FullBlock, refs: &HashMap<u32, FullBlock>) -> Vec<Insert
                 &mut insertions,
                 &mut allocator,
                 block.height(),
-                Coin::new(parent, puzzle_hash.into(), amount).coin_id(),
+                Coin::new(parent, puzzle_hash.into(), amount),
                 puzzle,
                 solution,
             );

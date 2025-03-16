@@ -6,10 +6,7 @@ edition = "2021"
 [dependencies]
 anyhow = "1.0.97"
 chia = "0.20.0"
-chia-traits = "0.20.0"
-chia-sha2 = "0.20.0"
 chia-wallet-sdk = { path = "../wallet-sdk", features = ["native-tls"] }
-chia_streamable_macro = "0.20.0"
 clvmr = "0.12.0"
 num_cpus = "1.16.0"
 rand = "0.9.0"
@@ -24,3 +21,5 @@ tracing-subscriber = { version = "0.3.19", features = ["env-filter"] }
 axum = { version = "0.8.1", features = ["macros"] }
 serde = { version = "1.0.219", features = ["derive"] }
 serde_with = { version = "3.12.0", features = ["hex"] }
+bincode = "1.3.3"
+itertools = "0.14.0"
