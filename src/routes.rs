@@ -1,5 +1,3 @@
-use std::collections::HashSet;
-
 use axum::{
     extract::{Path, Query, State},
     http::{Method, StatusCode},
@@ -7,6 +5,7 @@ use axum::{
     Json, Router,
 };
 use chia::protocol::Bytes32;
+use indexmap::IndexMap;
 use itertools::Itertools;
 use rocksdb::Direction;
 use serde::{Deserialize, Serialize};
@@ -41,6 +40,7 @@ pub struct Coin {
     pub coin_id: Bytes32,
     #[serde(flatten)]
     pub row: CoinRow,
+    pub spent_height: Option<u32>,
 }
 
 #[derive(Serialize)]
@@ -189,31 +189,55 @@ async fn coins_by_block(
         return Err(StatusCode::NOT_FOUND);
     };
 
-    let mut coins = HashSet::<Bytes32>::from_iter(app.db.lookup_spent_height(height).unwrap());
-    coins.extend(app.db.lookup_created_height(height).unwrap());
+    let mut coins = IndexMap::new();
 
-    let coins = coins
-        .into_iter()
-        .filter_map(|coin_id| {
-            let row = app.db.coin(coin_id).unwrap()?;
-            Some(Coin { coin_id, row })
-        })
-        .collect_vec();
+    for coin_id in [
+        app.db.coins_by_created_height(height).unwrap(),
+        app.db.coins_by_spent_height(height).unwrap(),
+    ]
+    .concat()
+    {
+        if coins.contains_key(&coin_id) {
+            continue;
+        }
 
-    Ok(Json(CoinsResponse { coins }))
+        let Some(coin) = app.db.coin(coin_id).unwrap() else {
+            continue;
+        };
+
+        let spend = app.db.coin_spend(coin_id).unwrap();
+
+        coins.insert(
+            coin_id,
+            Coin {
+                coin_id,
+                row: coin,
+                spent_height: spend.map(|spend| spend.spent_height),
+            },
+        );
+    }
+
+    Ok(Json(CoinsResponse {
+        coins: coins.into_values().collect_vec(),
+    }))
 }
 
 async fn coins_by_parent(
     State(app): State<App>,
     Path(coin_id): Path<Bytes32>,
 ) -> Result<Json<CoinsResponse>, StatusCode> {
-    let coins = app.db.lookup_parent_coin_id(coin_id).unwrap();
+    let coins = app.db.coins_by_parent_coin_id(coin_id).unwrap();
 
     let coins = coins
         .into_iter()
         .filter_map(|coin_id| {
             let row = app.db.coin(coin_id).unwrap()?;
-            Some(Coin { coin_id, row })
+            let spend = app.db.coin_spend(coin_id).unwrap();
+            Some(Coin {
+                coin_id,
+                row,
+                spent_height: spend.map(|spend| spend.spent_height),
+            })
         })
         .collect_vec();
 

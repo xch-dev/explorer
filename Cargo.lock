@@ -2316,6 +2316,7 @@ dependencies = [
  "chia-puzzles",
  "chia-wallet-sdk",
  "clvmr",
+ "indexmap 2.8.0",
  "itertools 0.14.0",
  "num_cpus",
  "pot",

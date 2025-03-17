@@ -6,7 +6,7 @@ use rocksdb::{
     ColumnFamily, ColumnFamilyDescriptor, Direction, IteratorMode, MergeOperands, Options, DB,
 };
 
-use super::{BlockRow, CoinRow, Transaction};
+use super::{BlockRow, CoinRow, CoinSpendRow, Transaction};
 
 struct Column {
     name: &'static str,
@@ -181,7 +181,15 @@ impl Database {
             .transpose()?)
     }
 
-    pub fn lookup_puzzle_hash(&self, puzzle_hash: Bytes32) -> Result<Vec<Bytes32>> {
+    pub fn coin_spend(&self, coin_id: Bytes32) -> Result<Option<CoinSpendRow>> {
+        Ok(self
+            .0
+            .get_cf(self.coin_spend_cf(), coin_id)?
+            .map(|bytes| pot::from_slice::<CoinSpendRow>(&bytes))
+            .transpose()?)
+    }
+
+    pub fn coins_by_puzzle_hash(&self, puzzle_hash: Bytes32) -> Result<Vec<Bytes32>> {
         let mut result = Vec::new();
 
         let iter = self
@@ -200,7 +208,7 @@ impl Database {
         Ok(result)
     }
 
-    pub fn lookup_parent_coin_id(&self, parent_coin_id: Bytes32) -> Result<Vec<Bytes32>> {
+    pub fn coins_by_parent_coin_id(&self, parent_coin_id: Bytes32) -> Result<Vec<Bytes32>> {
         let mut result = Vec::new();
 
         let iter = self
@@ -219,7 +227,7 @@ impl Database {
         Ok(result)
     }
 
-    pub fn lookup_hint(&self, hint: Bytes32) -> Result<Vec<Bytes32>> {
+    pub fn coins_by_hint(&self, hint: Bytes32) -> Result<Vec<Bytes32>> {
         let mut result = Vec::new();
 
         let iter = self
@@ -238,7 +246,7 @@ impl Database {
         Ok(result)
     }
 
-    pub fn lookup_created_height(&self, created_height: u32) -> Result<Vec<Bytes32>> {
+    pub fn coins_by_created_height(&self, created_height: u32) -> Result<Vec<Bytes32>> {
         let mut result = Vec::new();
 
         let iter = self
@@ -257,7 +265,7 @@ impl Database {
         Ok(result)
     }
 
-    pub fn lookup_spent_height(&self, spent_height: u32) -> Result<Vec<Bytes32>> {
+    pub fn coins_by_spent_height(&self, spent_height: u32) -> Result<Vec<Bytes32>> {
         let mut result = Vec::new();
 
         let iter = self

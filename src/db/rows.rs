@@ -27,11 +27,11 @@ pub struct CoinRow {
     pub parent_coin_id: Bytes32,
     pub puzzle_hash: Bytes32,
     pub amount: u64,
-    pub created_height: u32,
     pub hint: Option<Bytes32>,
     pub memos: Option<Bytes>,
     #[serde(rename = "type", flatten)]
     pub kind: CoinType,
+    pub created_height: u32,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
