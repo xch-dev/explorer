@@ -28,12 +28,20 @@ async fn main() -> Result<()> {
         .init();
 
     let config = Config::load()?;
+
+    fs::create_dir_all(config.db_path.parent().unwrap())?;
+
     let db = Database::new(&config.db_path)?;
 
-    let sqlite = SqlitePool::connect(config.blockchain_db_path.to_str().unwrap()).await?;
+    let sqlite = SqlitePool::connect(&format!(
+        "sqlite://{}",
+        config.blockchain_db_path.to_str().unwrap()
+    ))
+    .await?;
     let cert = fs::read(&config.cert_path)?;
-    let key = fs::read(&config.key_path)?;
-    let rpc = FullNodeClient::new(&cert, &key);
+    let key = fs::read_to_string(&config.key_path)?;
+    let key = topk8::from_pkcs1_pem(&key).unwrap_or(key);
+    let rpc = FullNodeClient::new(&cert, key.as_bytes());
 
     let sync = Sync::new(db.clone(), config.clone(), sqlite, rpc);
 

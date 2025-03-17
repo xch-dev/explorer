@@ -2359,6 +2359,7 @@ dependencies = [
  "sqlx",
  "tokio",
  "toml",
+ "topk8",
  "tower-http",
  "tracing",
  "tracing-subscriber",
@@ -3482,6 +3483,16 @@ dependencies = [
  "serde_spanned",
  "toml_datetime",
  "winnow 0.7.4",
+]
+
+[[package]]
+name = "topk8"
+version = "0.0.1"
+source = "git+https://github.com/xch-dev/topk8#2aae416d2e1b1925d67cbd70456ced76f3cc56d4"
+dependencies = [
+ "pkcs8",
+ "rsa",
+ "thiserror 2.0.12",
 ]
 
 [[package]]
