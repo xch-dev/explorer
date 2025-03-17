@@ -1,4 +1,4 @@
-import { Block } from "@/api/block";
+import { Block, BlocksResponse } from "@/api";
 import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import {
@@ -19,10 +19,10 @@ export function HomePage() {
     const fetchBlocks = async () => {
       try {
         const response = await fetch(
-          "http://localhost:3000/blocks?reverse=true"
+          "http://localhost:3000/blocks?reverse=true&limit=10"
         );
-        const data = await response.json();
-        setBlocks(data);
+        const data: BlocksResponse = await response.json();
+        setBlocks(data.blocks);
       } catch (error) {
         console.error("Error fetching blocks:", error);
       } finally {
@@ -82,7 +82,7 @@ export function HomePage() {
                   <thead>
                     <tr className="border-b bg-muted/50">
                       <th className="p-4 text-left">Block Height</th>
-                      <th className="p-4 text-left">Age</th>
+                      <th className="p-4 text-left">Date</th>
                       <th className="p-4 text-left">Net Coins</th>
                     </tr>
                   </thead>
