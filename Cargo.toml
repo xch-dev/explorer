@@ -6,7 +6,7 @@ edition = "2021"
 [dependencies]
 anyhow = "1.0.97"
 chia = "0.20.0"
-chia-wallet-sdk = { path = "../wallet-sdk", features = ["native-tls"] }
+chia-wallet-sdk = { git = "https://github.com/xch-dev/chia-wallet-sdk", features = ["native-tls"] }
 clvmr = "0.12.0"
 num_cpus = "1.16.0"
 rand = "0.9.0"
