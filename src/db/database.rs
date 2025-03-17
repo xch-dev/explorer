@@ -1,4 +1,4 @@
-use std::sync::Arc;
+use std::{path::Path, sync::Arc};
 
 use anyhow::{bail, Result};
 use chia::protocol::Bytes32;
@@ -17,7 +17,7 @@ struct Column {
 pub struct Database(pub(super) Arc<DB>);
 
 impl Database {
-    pub fn new() -> Result<Self> {
+    pub fn new(path: impl AsRef<Path>) -> Result<Self> {
         let cf_names = [
             Column {
                 name: "blocks",
@@ -100,7 +100,7 @@ impl Database {
             .collect();
 
         // Open database with column families
-        let db = DB::open_cf_descriptors(&options, "test.db", cf_descriptors)?;
+        let db = DB::open_cf_descriptors(&options, path, cf_descriptors)?;
 
         Ok(Self(Arc::new(db)))
     }

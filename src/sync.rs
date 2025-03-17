@@ -11,21 +11,26 @@ use sqlx::{Row, SqlitePool};
 use tracing::debug;
 use zstd::decode_all;
 
+use crate::config::Config;
 use crate::db::{CoinSpendRow, Database};
 use crate::parse_blocks;
 use crate::process::{process_blocks, Insertion};
 
-const BATCH_SIZE: u32 = 1000;
-
 pub struct Sync {
     db: Database,
+    config: Config,
     sqlite: SqlitePool,
     rpc: FullNodeClient,
 }
 
 impl Sync {
-    pub fn new(db: Database, sqlite: SqlitePool, rpc: FullNodeClient) -> Self {
-        Self { db, sqlite, rpc }
+    pub fn new(db: Database, config: Config, sqlite: SqlitePool, rpc: FullNodeClient) -> Self {
+        Self {
+            db,
+            config,
+            sqlite,
+            rpc,
+        }
     }
 
     pub async fn start(self) -> Result<()> {
@@ -71,7 +76,7 @@ impl Sync {
 
             let response = sqlx::query(&format!(
                 "SELECT block FROM full_blocks WHERE in_main_chain = 1 AND height IN ({})",
-                (sync_height..sync_height + BATCH_SIZE)
+                (sync_height..sync_height + self.config.batch_size)
                     .map(|h| h.to_string())
                     .collect::<Vec<String>>()
                     .join(",")
@@ -171,14 +176,15 @@ impl Sync {
 
             let insert_duration = insert_start.elapsed();
 
-            sync_height += BATCH_SIZE;
-            blocks_processed += BATCH_SIZE;
+            sync_height += self.config.batch_size;
+            blocks_processed += self.config.batch_size;
 
             debug!(
                 "{} blocks processed in {:?}, with an average of {} per batch",
                 blocks_processed,
                 instant.elapsed(),
-                instant.elapsed().as_secs_f32() / (blocks_processed as f32 / BATCH_SIZE as f32)
+                instant.elapsed().as_secs_f32()
+                    / (blocks_processed as f32 / self.config.batch_size as f32)
             );
 
             debug!(
