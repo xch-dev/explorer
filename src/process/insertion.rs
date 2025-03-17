@@ -8,9 +8,11 @@ use crate::db::{BlockRow, CoinRow};
 pub enum Insertion {
     Block {
         block: Box<BlockRow>,
+        height: u32,
     },
     Coin {
         coin: Box<CoinRow>,
+        coin_id: Bytes32,
     },
     CatTail {
         asset_id: Bytes32,

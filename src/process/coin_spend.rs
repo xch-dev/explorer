@@ -185,14 +185,12 @@ impl SpendState<'_> {
                 .map(Program::into_inner);
 
             coins.push(CoinRow {
-                coin_id: Coin::new(self.coin_id, cond.puzzle_hash, cond.amount).coin_id(),
                 parent_coin_id: self.coin_id,
                 puzzle_hash: cond.puzzle_hash,
                 amount: cond.amount,
                 created_height: self.height,
                 hint,
                 memos,
-                reward: false,
                 kind: CoinType::Unknown,
             });
         }
@@ -202,8 +200,11 @@ impl SpendState<'_> {
 
     fn insert_coin_rows(&mut self, coins: Vec<CoinRow>) {
         for coin in coins {
+            let coin_id = Coin::new(coin.parent_coin_id, coin.puzzle_hash, coin.amount).coin_id();
+
             self.insertions.push(Insertion::Coin {
                 coin: Box::new(coin),
+                coin_id,
             });
             self.additions += 1;
         }

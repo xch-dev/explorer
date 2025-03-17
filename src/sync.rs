@@ -128,13 +128,13 @@ impl Sync {
 
             for insertion in insertions {
                 match insertion {
-                    Insertion::Block { block } => {
-                        tx.put_block(&block)?;
+                    Insertion::Block { block, height } => {
+                        tx.put_block(height, &block)?;
 
                         block_inserts += 1;
                     }
-                    Insertion::Coin { coin } => {
-                        tx.put_coin(&coin)?;
+                    Insertion::Coin { coin, coin_id } => {
+                        tx.put_coin(coin_id, &coin)?;
 
                         coin_inserts += 1;
                     }

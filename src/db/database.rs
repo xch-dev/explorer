@@ -1,6 +1,6 @@
 use std::sync::Arc;
 
-use anyhow::Result;
+use anyhow::{bail, Result};
 use chia::protocol::Bytes32;
 use rocksdb::{
     ColumnFamily, ColumnFamilyDescriptor, Direction, IteratorMode, MergeOperands, Options, DB,
@@ -149,7 +149,7 @@ impl Database {
             let (key, value) = item?;
 
             if key.len() != 4 {
-                continue;
+                bail!("invalid block height key");
             }
 
             let height = u32::from_be_bytes(key[..].try_into().unwrap());

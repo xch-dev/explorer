@@ -3,7 +3,6 @@ use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub struct BlockRow {
-    pub height: u32,
     pub header_hash: Bytes32,
     pub weight: u128,
     pub total_iters: u128,
@@ -25,12 +24,10 @@ pub struct TransactionInfo {
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct CoinRow {
-    pub coin_id: Bytes32,
     pub parent_coin_id: Bytes32,
     pub puzzle_hash: Bytes32,
     pub amount: u64,
     pub created_height: u32,
-    pub reward: bool,
     pub hint: Option<Bytes32>,
     pub memos: Option<Bytes>,
     #[serde(rename = "type", flatten)]
@@ -40,7 +37,7 @@ pub struct CoinRow {
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(tag = "type", rename_all = "snake_case")]
 pub enum CoinType {
-    Xch,
+    Reward,
     Unknown,
     Cat {
         asset_id: Bytes32,

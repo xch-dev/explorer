@@ -31,8 +31,23 @@ pub fn router(app: App) -> Router {
         .route("/blocks/hash/{hash}", get(block_by_hash))
         .route("/blocks", get(blocks))
         .route("/coins/block/{hash}", get(coins_by_block))
+        .route("/coins/children/{coin_id}", get(coins_by_parent))
         .with_state(app)
         .layer(cors)
+}
+
+#[derive(Serialize)]
+pub struct Coin {
+    pub coin_id: Bytes32,
+    #[serde(flatten)]
+    pub row: CoinRow,
+}
+
+#[derive(Serialize)]
+pub struct Block {
+    pub height: u32,
+    #[serde(flatten)]
+    pub row: BlockRow,
 }
 
 #[derive(Serialize)]
@@ -48,7 +63,12 @@ async fn state(State(app): State<App>) -> Result<Json<StateResponse>, StatusCode
     }))
 }
 
-async fn latest_block(State(app): State<App>) -> Result<Json<BlockRow>, StatusCode> {
+#[derive(Serialize)]
+pub struct BlockResponse {
+    pub block: Block,
+}
+
+async fn latest_block(State(app): State<App>) -> Result<Json<BlockResponse>, StatusCode> {
     let Some(height) = app.db.peak_height().unwrap() else {
         return Err(StatusCode::NOT_FOUND);
     };
@@ -57,24 +77,28 @@ async fn latest_block(State(app): State<App>) -> Result<Json<BlockRow>, StatusCo
         return Err(StatusCode::NOT_FOUND);
     };
 
-    Ok(Json(block))
+    Ok(Json(BlockResponse {
+        block: Block { height, row: block },
+    }))
 }
 
 async fn block_by_height(
     State(app): State<App>,
     Path(height): Path<u32>,
-) -> Result<Json<BlockRow>, StatusCode> {
+) -> Result<Json<BlockResponse>, StatusCode> {
     let Some(block) = app.db.block(height).unwrap() else {
         return Err(StatusCode::NOT_FOUND);
     };
 
-    Ok(Json(block))
+    Ok(Json(BlockResponse {
+        block: Block { height, row: block },
+    }))
 }
 
 async fn block_by_hash(
     State(app): State<App>,
     Path(hash): Path<Bytes32>,
-) -> Result<Json<BlockRow>, StatusCode> {
+) -> Result<Json<BlockResponse>, StatusCode> {
     let Some(height) = app.db.block_height(hash).unwrap() else {
         return Err(StatusCode::NOT_FOUND);
     };
@@ -83,7 +107,9 @@ async fn block_by_hash(
         return Err(StatusCode::NOT_FOUND);
     };
 
-    Ok(Json(block))
+    Ok(Json(BlockResponse {
+        block: Block { height, row: block },
+    }))
 }
 
 #[derive(Deserialize)]
@@ -102,7 +128,7 @@ fn default_limit() -> u32 {
 
 #[derive(Serialize)]
 pub struct BlocksResponse {
-    pub blocks: Vec<BlockRow>,
+    pub blocks: Vec<Block>,
 }
 
 async fn blocks(
@@ -134,12 +160,25 @@ async fn blocks(
         )
         .unwrap();
 
-    Ok(Json(BlocksResponse { blocks }))
+    Ok(Json(BlocksResponse {
+        blocks: blocks
+            .into_iter()
+            .enumerate()
+            .map(|(offset, block)| Block {
+                height: if query.reverse {
+                    end - offset as u32
+                } else {
+                    start + offset as u32
+                },
+                row: block,
+            })
+            .collect_vec(),
+    }))
 }
 
 #[derive(Serialize)]
 pub struct CoinsResponse {
-    pub coins: Vec<CoinRow>,
+    pub coins: Vec<Coin>,
 }
 
 async fn coins_by_block(
@@ -155,7 +194,27 @@ async fn coins_by_block(
 
     let coins = coins
         .into_iter()
-        .filter_map(|coin| app.db.coin(coin).unwrap())
+        .filter_map(|coin_id| {
+            let row = app.db.coin(coin_id).unwrap()?;
+            Some(Coin { coin_id, row })
+        })
+        .collect_vec();
+
+    Ok(Json(CoinsResponse { coins }))
+}
+
+async fn coins_by_parent(
+    State(app): State<App>,
+    Path(coin_id): Path<Bytes32>,
+) -> Result<Json<CoinsResponse>, StatusCode> {
+    let coins = app.db.lookup_parent_coin_id(coin_id).unwrap();
+
+    let coins = coins
+        .into_iter()
+        .filter_map(|coin_id| {
+            let row = app.db.coin(coin_id).unwrap()?;
+            Some(Coin { coin_id, row })
+        })
         .collect_vec();
 
     Ok(Json(CoinsResponse { coins }))

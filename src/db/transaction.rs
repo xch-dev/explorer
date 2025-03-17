@@ -22,34 +22,34 @@ impl<'a> Transaction<'a> {
         Ok(())
     }
 
-    pub fn put_block(&mut self, block: &BlockRow) -> Result<()> {
+    pub fn put_block(&mut self, height: u32, block: &BlockRow) -> Result<()> {
         self.batch.put_cf(
             self.db.block_cf(),
-            block.height.to_be_bytes(),
+            height.to_be_bytes(),
             pot::to_vec(block)?,
         );
 
         self.batch.put_cf(
             self.db.block_hash_cf(),
             block.header_hash.as_ref(),
-            block.height.to_be_bytes(),
+            height.to_be_bytes(),
         );
 
         Ok(())
     }
 
-    pub fn put_coin(&mut self, coin: &CoinRow) -> Result<()> {
+    pub fn put_coin(&mut self, coin_id: Bytes32, coin: &CoinRow) -> Result<()> {
         self.batch
-            .put_cf(self.db.coin_cf(), coin.coin_id, pot::to_vec(coin)?);
+            .put_cf(self.db.coin_cf(), coin_id, pot::to_vec(coin)?);
 
-        self.add_to_puzzle_hash_index(coin.puzzle_hash, coin.coin_id)?;
-        self.add_to_parent_coin_id_index(coin.parent_coin_id, coin.coin_id)?;
+        self.add_to_puzzle_hash_index(coin.puzzle_hash, coin_id)?;
+        self.add_to_parent_coin_id_index(coin.parent_coin_id, coin_id)?;
 
         if let Some(hint) = coin.hint {
-            self.add_to_hint_index(hint, coin.coin_id)?;
+            self.add_to_hint_index(hint, coin_id)?;
         }
 
-        self.add_to_created_height_index(coin.created_height, coin.coin_id)?;
+        self.add_to_created_height_index(coin.created_height, coin_id)?;
 
         Ok(())
     }

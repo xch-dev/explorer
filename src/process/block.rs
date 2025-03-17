@@ -31,16 +31,15 @@ fn process_block(block: FullBlock, refs: &HashMap<u32, FullBlock>) -> Vec<Insert
     for coin in block.get_included_reward_coins() {
         insertions.push(Insertion::Coin {
             coin: Box::new(CoinRow {
-                coin_id: coin.coin_id(),
                 parent_coin_id: coin.parent_coin_info,
                 puzzle_hash: coin.puzzle_hash,
                 amount: coin.amount,
                 created_height: block.height(),
-                reward: true,
                 hint: None,
                 memos: None,
-                kind: CoinType::Xch,
+                kind: CoinType::Reward,
             }),
+            coin_id: coin.coin_id(),
         });
     }
 
@@ -80,9 +79,10 @@ fn process_block(block: FullBlock, refs: &HashMap<u32, FullBlock>) -> Vec<Insert
         }
     }
 
+    let height = block.height();
+
     insertions.push(Insertion::Block {
         block: Box::new(BlockRow {
-            height: block.height(),
             header_hash: block.header_hash(),
             weight: block.weight(),
             total_iters: block.total_iters(),
@@ -108,6 +108,7 @@ fn process_block(block: FullBlock, refs: &HashMap<u32, FullBlock>) -> Vec<Insert
                 None
             },
         }),
+        height,
     });
 
     insertions
