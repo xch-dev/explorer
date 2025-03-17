@@ -1,3 +1,5 @@
+use std::collections::HashSet;
+
 use axum::{
     extract::{Path, Query, State},
     http::{Method, StatusCode},
@@ -5,11 +7,12 @@ use axum::{
     Json, Router,
 };
 use chia::protocol::Bytes32;
+use itertools::Itertools;
 use rocksdb::Direction;
 use serde::{Deserialize, Serialize};
 use tower_http::cors::{Any, CorsLayer};
 
-use crate::db::{BlockRow, Database};
+use crate::db::{BlockRow, CoinRow, Database};
 
 #[derive(Clone)]
 pub struct App {
@@ -22,13 +25,27 @@ pub fn router(app: App) -> Router {
         .allow_origin(Any);
 
     Router::new()
+        .route("/state", get(state))
         .route("/blocks/latest", get(latest_block))
         .route("/blocks/height/{height}", get(block_by_height))
         .route("/blocks/hash/{hash}", get(block_by_hash))
         .route("/blocks", get(blocks))
-        .route("/state", get(state))
+        .route("/coins/block/{hash}", get(coins_by_block))
         .with_state(app)
         .layer(cors)
+}
+
+#[derive(Serialize)]
+pub struct StateResponse {
+    pub peak_height: u32,
+}
+
+async fn state(State(app): State<App>) -> Result<Json<StateResponse>, StatusCode> {
+    let height = app.db.peak_height().unwrap().unwrap_or(0);
+
+    Ok(Json(StateResponse {
+        peak_height: height,
+    }))
 }
 
 async fn latest_block(State(app): State<App>) -> Result<Json<BlockRow>, StatusCode> {
@@ -121,14 +138,25 @@ async fn blocks(
 }
 
 #[derive(Serialize)]
-pub struct StateResponse {
-    pub peak_height: u32,
+pub struct CoinsResponse {
+    pub coins: Vec<CoinRow>,
 }
 
-async fn state(State(app): State<App>) -> Result<Json<StateResponse>, StatusCode> {
-    let height = app.db.peak_height().unwrap().unwrap_or(0);
+async fn coins_by_block(
+    State(app): State<App>,
+    Path(hash): Path<Bytes32>,
+) -> Result<Json<CoinsResponse>, StatusCode> {
+    let Some(height) = app.db.block_height(hash).unwrap() else {
+        return Err(StatusCode::NOT_FOUND);
+    };
 
-    Ok(Json(StateResponse {
-        peak_height: height,
-    }))
+    let mut coins = HashSet::<Bytes32>::from_iter(app.db.lookup_spent_height(height).unwrap());
+    coins.extend(app.db.lookup_created_height(height).unwrap());
+
+    let coins = coins
+        .into_iter()
+        .filter_map(|coin| app.db.coin(coin).unwrap())
+        .collect_vec();
+
+    Ok(Json(CoinsResponse { coins }))
 }
