@@ -4,7 +4,7 @@ use axum::{
     routing::get,
     Json, Router,
 };
-use chia::protocol::Bytes32;
+use chia::protocol::{Bytes, Bytes32};
 use indexmap::IndexMap;
 use itertools::Itertools;
 use rocksdb::Direction;
@@ -31,6 +31,7 @@ pub fn router(app: App) -> Router {
         .route("/blocks", get(blocks))
         .route("/coins/block/{hash}", get(coins_by_block))
         .route("/coins/children/{coin_id}", get(coins_by_parent))
+        .route("/coins/id/{coin_id}", get(coin_by_id))
         .with_state(app)
         .layer(cors)
 }
@@ -242,4 +243,41 @@ async fn coins_by_parent(
         .collect_vec();
 
     Ok(Json(CoinsResponse { coins }))
+}
+
+#[derive(Serialize)]
+pub struct CoinResponse {
+    pub coin: Coin,
+    pub puzzle_reveal: Option<Bytes>,
+    pub solution: Option<Bytes>,
+}
+
+async fn coin_by_id(
+    State(app): State<App>,
+    Path(coin_id): Path<Bytes32>,
+) -> Result<Json<CoinResponse>, StatusCode> {
+    let Some(coin) = app.db.coin(coin_id).unwrap() else {
+        return Err(StatusCode::NOT_FOUND);
+    };
+
+    let (puzzle_reveal, solution, spent_height) =
+        if let Some(spend) = app.db.coin_spend(coin_id).unwrap() {
+            (
+                Some(spend.puzzle_reveal),
+                Some(spend.solution),
+                Some(spend.spent_height),
+            )
+        } else {
+            (None, None, None)
+        };
+
+    Ok(Json(CoinResponse {
+        coin: Coin {
+            coin_id,
+            row: coin,
+            spent_height,
+        },
+        puzzle_reveal,
+        solution,
+    }))
 }
