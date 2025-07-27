@@ -6,7 +6,6 @@ use serde::{Deserialize, Serialize};
 pub enum CoinType {
     Unknown,
     Reward,
-    Xch,
     Cat {
         asset_id: Bytes32,
         hidden_puzzle_hash: Option<Bytes32>,

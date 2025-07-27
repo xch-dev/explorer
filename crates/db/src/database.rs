@@ -6,10 +6,9 @@ use rocksdb::{
     ColumnFamily, ColumnFamilyDescriptor, DBCompressionType, Direction, IteratorMode, Options,
     ReadOptions, SliceTransform, DB,
 };
+use xchdev_types::{BlockRecord, CoinRecord, CoinSpendRecord};
 
-use crate::db::CoinRow;
-
-use super::{BlockRow, Transaction};
+use super::Transaction;
 
 #[derive(Clone)]
 pub struct Database(pub(super) Arc<DB>);
@@ -21,8 +20,8 @@ impl Database {
             "block_hashes",
             "coins",
             "coin_height_index",
-            "coin_puzzle_hash_index",
             "coin_parent_hash_index",
+            "coin_spends",
         ];
 
         let mut options = Options::default();
@@ -63,7 +62,7 @@ impl Database {
         Ok(Self(Arc::new(db)))
     }
 
-    pub fn peak(&self) -> Result<Option<(u32, BlockRow)>> {
+    pub fn peak(&self) -> Result<Option<(u32, BlockRecord)>> {
         let Some((height, block)) = self
             .0
             .iterator_cf(self.blocks_cf(), IteratorMode::End)
@@ -74,15 +73,16 @@ impl Database {
         };
 
         let height = u32::from_be_bytes((*height).try_into().unwrap());
-        let block = pot::from_slice::<BlockRow>(&block)?;
+        let block = pot::from_slice(&block)?;
 
         Ok(Some((height, block)))
     }
 
-    pub fn block(&self, height: u32) -> Result<Option<BlockRow>> {
-        let block = self.0.get_cf(self.blocks_cf(), height.to_be_bytes())?;
-        Ok(block
-            .map(|bytes| pot::from_slice::<BlockRow>(&bytes))
+    pub fn block(&self, height: u32) -> Result<Option<BlockRecord>> {
+        Ok(self
+            .0
+            .get_cf(self.blocks_cf(), height.to_be_bytes())?
+            .map(|bytes| pot::from_slice(&bytes))
             .transpose()?)
     }
 
@@ -91,7 +91,7 @@ impl Database {
         start_height: Option<u32>,
         direction: Direction,
         limit: usize,
-    ) -> Result<Vec<(u32, BlockRow)>> {
+    ) -> Result<Vec<(u32, BlockRecord)>> {
         if limit == 0 {
             return Ok(Vec::new());
         }
@@ -110,9 +110,9 @@ impl Database {
             .iterator_cf(self.blocks_cf(), mode)
             .take(limit)
             .map(|item| {
-                let (key, value) = item?;
-                let height = u32::from_be_bytes((*key).try_into().unwrap());
-                let block = pot::from_slice::<BlockRow>(&value)?;
+                let (height, block) = item?;
+                let height = u32::from_be_bytes((*height).try_into().unwrap());
+                let block = pot::from_slice(&block)?;
                 Ok((height, block))
             })
             .collect()
@@ -123,46 +123,19 @@ impl Database {
         Ok(height.map(|bytes| u32::from_be_bytes(bytes.try_into().unwrap())))
     }
 
-    pub fn coin(&self, coin_id: Bytes32) -> Result<Option<CoinRow>> {
-        let coin = self.0.get_cf(self.coins_cf(), coin_id.as_ref())?;
-        Ok(coin
-            .map(|bytes| pot::from_slice::<CoinRow>(&bytes))
+    pub fn coin(&self, coin_id: Bytes32) -> Result<Option<CoinRecord>> {
+        Ok(self
+            .0
+            .get_cf(self.coins_cf(), coin_id.as_ref())?
+            .map(|bytes| pot::from_slice(&bytes))
             .transpose()?)
     }
 
-    pub fn coins(
-        &self,
-        start_height: Option<u32>,
-        direction: Direction,
-        limit: usize,
-    ) -> Result<Vec<Bytes32>> {
-        let bytes;
-        let mode = if let Some(start_height) = start_height {
-            bytes = [start_height.to_be_bytes().as_ref(), &[0; 32]].concat();
-            IteratorMode::From(&bytes, direction)
-        } else if matches!(direction, Direction::Forward) {
-            bytes = [u32::MIN.to_be_bytes().as_ref(), &[0; 32]].concat();
-            IteratorMode::From(&bytes, direction)
-        } else {
-            bytes = [u32::MAX.to_be_bytes().as_ref(), &[0; 32]].concat();
-            IteratorMode::From(&bytes, direction)
-        };
-
-        self.0
-            .iterator_cf(self.coin_height_index_cf(), mode)
-            .take(limit)
-            .map(|item| Ok(item?.0[4..].try_into().unwrap()))
-            .collect()
-    }
-
     pub fn coins_by_height(&self, height: u32) -> Result<Vec<Bytes32>> {
-        let mut read_opts = ReadOptions::default();
-        read_opts.set_prefix_same_as_start(true);
-
         self.0
             .iterator_cf_opt(
                 self.coin_height_index_cf(),
-                read_opts,
+                index_opts(),
                 IteratorMode::From(
                     &[height.to_be_bytes().as_ref(), &[0; 32]].concat(),
                     Direction::Forward,
@@ -172,62 +145,23 @@ impl Database {
             .collect()
     }
 
-    pub fn coins_by_puzzle_hash(
-        &self,
-        puzzle_hash: Bytes32,
-        start_height: Option<u32>,
-        direction: Direction,
-        limit: usize,
-    ) -> Result<Vec<Bytes32>> {
-        let bytes;
-        let mode = if let Some(start_height) = start_height {
-            bytes = [
-                puzzle_hash.as_ref(),
-                start_height.to_be_bytes().as_ref(),
-                &[0; 32],
-            ]
-            .concat();
-            IteratorMode::From(&bytes, direction)
-        } else if matches!(direction, Direction::Forward) {
-            bytes = [
-                puzzle_hash.as_ref(),
-                u32::MIN.to_be_bytes().as_ref(),
-                &[0; 32],
-            ]
-            .concat();
-            IteratorMode::From(&bytes, direction)
-        } else {
-            bytes = [
-                puzzle_hash.as_ref(),
-                u32::MAX.to_be_bytes().as_ref(),
-                &[0; 32],
-            ]
-            .concat();
-            IteratorMode::From(&bytes, direction)
-        };
-
-        let mut read_opts = ReadOptions::default();
-        read_opts.set_prefix_same_as_start(true);
-
-        self.0
-            .iterator_cf_opt(self.coin_puzzle_hash_index_cf(), read_opts, mode)
-            .take(limit)
-            .map(|item| Ok(item?.0[36..].try_into().unwrap()))
-            .collect()
-    }
-
-    pub fn coins_by_parent_id(&self, parent_id: Bytes32) -> Result<Vec<Bytes32>> {
-        let mut read_opts = ReadOptions::default();
-        read_opts.set_prefix_same_as_start(true);
-
+    pub fn coins_by_parent(&self, parent_hash: Bytes32) -> Result<Vec<Bytes32>> {
         self.0
             .iterator_cf_opt(
-                self.coin_puzzle_hash_index_cf(),
-                read_opts,
-                IteratorMode::From(parent_id.as_ref(), Direction::Forward),
+                self.coin_parent_hash_index_cf(),
+                index_opts(),
+                IteratorMode::From(parent_hash.as_ref(), Direction::Forward),
             )
             .map(|item| Ok(item?.0[32..].try_into().unwrap()))
             .collect()
+    }
+
+    pub fn coin_spend(&self, coin_id: Bytes32) -> Result<Option<CoinSpendRecord>> {
+        Ok(self
+            .0
+            .get_cf(self.coin_spends_cf(), coin_id.as_ref())?
+            .map(|bytes| pot::from_slice(&bytes))
+            .transpose()?)
     }
 
     pub(super) fn blocks_cf(&self) -> &ColumnFamily {
@@ -246,15 +180,21 @@ impl Database {
         self.0.cf_handle("coin_height_index").unwrap()
     }
 
-    pub(super) fn coin_puzzle_hash_index_cf(&self) -> &ColumnFamily {
-        self.0.cf_handle("coin_puzzle_hash_index").unwrap()
-    }
-
     pub(super) fn coin_parent_hash_index_cf(&self) -> &ColumnFamily {
         self.0.cf_handle("coin_parent_hash_index").unwrap()
+    }
+
+    pub(super) fn coin_spends_cf(&self) -> &ColumnFamily {
+        self.0.cf_handle("coin_spends").unwrap()
     }
 
     pub fn transaction(&self) -> Transaction {
         Transaction::new(self)
     }
+}
+
+fn index_opts() -> ReadOptions {
+    let mut read_opts = ReadOptions::default();
+    read_opts.set_prefix_same_as_start(true);
+    read_opts
 }

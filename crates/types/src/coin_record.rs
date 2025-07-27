@@ -9,7 +9,7 @@ pub struct CoinRecord {
     pub created_height: u32,
     pub spent_height: Option<u32>,
     pub hint: Option<Bytes32>,
-    pub serialized_memos: Program,
+    pub serialized_memos: Option<Program>,
     #[serde(flatten)]
     pub kind: CoinType,
 }

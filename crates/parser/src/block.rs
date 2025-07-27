@@ -2,7 +2,7 @@ use std::collections::HashMap;
 
 use chia::{
     consensus::{
-        get_puzzle_and_solution::parse_coin_spend,
+        get_puzzle_and_solution::parse_coin_spend as parse_consensus_spend,
         run_block_generator::setup_generator_args,
         validation_error::{first, next},
     },
@@ -10,30 +10,9 @@ use chia::{
 };
 use chia_wallet_sdk::{driver::Puzzle, types::run_puzzle};
 use clvmr::{serde::node_from_bytes_backrefs, Allocator, NodePtr};
+use xchdev_types::{BlockRecord, CoinRecord, CoinType, TransactionInfo};
 
-use crate::{Error, Result};
-
-#[derive(Debug, Clone)]
-pub struct ParsedBlock {
-    pub height: u32,
-    pub header_hash: Bytes32,
-    pub weight: u128,
-    pub total_iters: u128,
-    pub farmer_puzzle_hash: Bytes32,
-    pub pool_puzzle_hash: Option<Bytes32>,
-    pub prev_block_hash: Bytes32,
-    pub transaction_info: Option<ParsedTransactionInfo>,
-    pub reward_coins: Vec<Coin>,
-}
-
-#[derive(Debug, Clone)]
-pub struct ParsedTransactionInfo {
-    pub timestamp: u64,
-    pub fees: u64,
-    pub cost: u64,
-    pub spends: Vec<BlockSpend>,
-    pub prev_transaction_block_hash: Bytes32,
-}
+use crate::{parse_block_spend, Error, Result, UpdatedCoin};
 
 #[derive(Debug, Clone, Copy)]
 pub struct BlockSpend {
@@ -42,12 +21,31 @@ pub struct BlockSpend {
     pub solution: NodePtr,
 }
 
+#[derive(Debug, Clone)]
+pub struct ParsedBlock {
+    pub block_record: BlockRecord,
+    pub updates: Vec<UpdatedCoin>,
+    pub additions: Vec<CoinRecord>,
+}
+
 pub fn parse_block(
     allocator: &mut Allocator,
     block: &FullBlock,
     refs: &HashMap<u32, FullBlock>,
 ) -> Result<ParsedBlock> {
-    let mut block_spends = Vec::new();
+    let mut updates = Vec::new();
+    let mut additions = Vec::new();
+
+    for coin in block.get_included_reward_coins() {
+        additions.push(CoinRecord {
+            coin,
+            created_height: block.height(),
+            spent_height: None,
+            hint: None,
+            serialized_memos: None,
+            kind: CoinType::Reward,
+        });
+    }
 
     if let Some(generator_blob) = &block.transactions_generator {
         let generator = node_from_bytes_backrefs(allocator, generator_blob)?;
@@ -70,16 +68,18 @@ pub fn parse_block(
 
         for (parent, amount, puzzle, solution) in spends {
             let puzzle = Puzzle::parse(allocator, puzzle);
-
-            block_spends.push(BlockSpend {
+            let spend = BlockSpend {
                 coin: Coin::new(parent, puzzle.curried_puzzle_hash().into(), amount),
                 puzzle,
                 solution,
-            });
+            };
+            let result = parse_block_spend(allocator, block.height(), spend)?;
+            updates.push(result.update);
+            additions.extend(result.additions);
         }
     }
 
-    Ok(ParsedBlock {
+    let block_record = BlockRecord {
         height: block.height(),
         header_hash: block.header_hash(),
         weight: block.weight(),
@@ -94,17 +94,23 @@ pub fn parse_block(
             block.transactions_info.as_ref(),
             block.foliage_transaction_block.as_ref(),
         ) {
-            Some(ParsedTransactionInfo {
+            Some(TransactionInfo {
                 timestamp: tx_block.timestamp,
                 fees: tx_info.fees,
                 cost: tx_info.cost,
-                spends: block_spends,
+                additions: additions.len(),
+                removals: updates.len(),
                 prev_transaction_block_hash: tx_block.prev_transaction_block_hash,
             })
         } else {
             None
         },
-        reward_coins: block.get_included_reward_coins(),
+    };
+
+    Ok(ParsedBlock {
+        block_record,
+        updates,
+        additions,
     })
 }
 
@@ -117,7 +123,7 @@ fn parse_block_spends(
 
     while let Some((coin_spend, next)) = next(allocator, iter)? {
         iter = next;
-        let (parent, amount, puzzle, solution) = parse_coin_spend(allocator, coin_spend)?;
+        let (parent, amount, puzzle, solution) = parse_consensus_spend(allocator, coin_spend)?;
         spends.push((parent.as_ref().try_into()?, amount, puzzle, solution));
     }
 

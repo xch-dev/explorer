@@ -2,3 +2,12 @@
 name = "xchdev-db"
 version = "0.1.0"
 edition = "2021"
+
+[dependencies]
+xchdev-types = { workspace = true }
+chia = { workspace = true }
+serde = { workspace = true, features = ["derive"] }
+rocksdb = { workspace = true }
+anyhow = { workspace = true }
+num_cpus = { workspace = true }
+pot = { workspace = true }
