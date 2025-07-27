@@ -22,12 +22,12 @@ pub struct ParsedBlock {
     pub farmer_puzzle_hash: Bytes32,
     pub pool_puzzle_hash: Option<Bytes32>,
     pub prev_block_hash: Bytes32,
-    pub transaction_info: Option<TransactionInfo>,
+    pub transaction_info: Option<ParsedTransactionInfo>,
     pub reward_coins: Vec<Coin>,
 }
 
 #[derive(Debug, Clone)]
-pub struct TransactionInfo {
+pub struct ParsedTransactionInfo {
     pub timestamp: u64,
     pub fees: u64,
     pub cost: u64,
@@ -94,7 +94,7 @@ pub fn parse_block(
             block.transactions_info.as_ref(),
             block.foliage_transaction_block.as_ref(),
         ) {
-            Some(TransactionInfo {
+            Some(ParsedTransactionInfo {
                 timestamp: tx_block.timestamp,
                 fees: tx_info.fees,
                 cost: tx_info.cost,

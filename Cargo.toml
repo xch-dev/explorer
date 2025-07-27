@@ -2,6 +2,11 @@
 members = ["crates/*"]
 
 [workspace.dependencies]
+xchdev-api = { path = "crates/api" }
+xchdev-db = { path = "crates/db" }
+xchdev-parser = { path = "crates/parser" }
+xchdev-types = { path = "crates/types" }
+
 chia-wallet-sdk = { path = "../wallet-sdk" }
 chia = "0.26.0"
 clvmr = "0.14.0"
