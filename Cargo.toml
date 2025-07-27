@@ -2,10 +2,13 @@
 members = ["crates/*"]
 
 [workspace.dependencies]
-anyhow = "1.0.97"
+chia-wallet-sdk = { path = "../wallet-sdk" }
 chia = "0.26.0"
-chia-wallet-sdk = { path = "../wallet-sdk", features = ["native-tls"] }
 clvmr = "0.14.0"
+thiserror = "2.0.12"
+serde = { version = "1.0.219" }
+
+anyhow = "1.0.97"
 num_cpus = "1.16.0"
 rocksdb = "0.23.0"
 sqlx = { version = "0.8.3", features = ["runtime-tokio", "sqlite"] }
@@ -16,7 +19,6 @@ chia-puzzles = "0.20.1"
 tracing = "0.1.41"
 tracing-subscriber = { version = "0.3.19", features = ["env-filter"] }
 axum = { version = "0.8.1", features = ["macros"] }
-serde = { version = "1.0.219", features = ["derive"] }
 itertools = "0.14.0"
 pot = "3.0.1"
 tower-http = { version = "0.6.2", features = ["cors"] }
@@ -24,4 +26,3 @@ indexmap = "2.8.0"
 homedir = "0.3.4"
 toml = "0.8.20"
 topk8 = { git = "https://github.com/xch-dev/topk8" }
-thiserror = "2.0.12"
