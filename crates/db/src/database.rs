@@ -8,6 +8,8 @@ use rocksdb::{
 };
 use xchdev_types::{BlockRecord, CoinRecord, CoinSpendRecord};
 
+use crate::decode;
+
 use super::Transaction;
 
 #[derive(Clone)]
@@ -73,17 +75,16 @@ impl Database {
         };
 
         let height = u32::from_be_bytes((*height).try_into().unwrap());
-        let block = pot::from_slice(&block)?;
+        let block = decode::<BlockRecord>(&block)?;
 
         Ok(Some((height, block)))
     }
 
     pub fn block(&self, height: u32) -> Result<Option<BlockRecord>> {
-        Ok(self
-            .0
+        self.0
             .get_cf(self.blocks_cf(), height.to_be_bytes())?
-            .map(|bytes| pot::from_slice(&bytes))
-            .transpose()?)
+            .map(|bytes| decode::<BlockRecord>(&bytes))
+            .transpose()
     }
 
     pub fn blocks(
@@ -112,7 +113,7 @@ impl Database {
             .map(|item| {
                 let (height, block) = item?;
                 let height = u32::from_be_bytes((*height).try_into().unwrap());
-                let block = pot::from_slice(&block)?;
+                let block = decode::<BlockRecord>(&block)?;
                 Ok((height, block))
             })
             .collect()
@@ -124,11 +125,10 @@ impl Database {
     }
 
     pub fn coin(&self, coin_id: Bytes32) -> Result<Option<CoinRecord>> {
-        Ok(self
-            .0
+        self.0
             .get_cf(self.coins_cf(), coin_id.as_ref())?
-            .map(|bytes| pot::from_slice(&bytes))
-            .transpose()?)
+            .map(|bytes| decode::<CoinRecord>(&bytes))
+            .transpose()
     }
 
     pub fn coins_by_height(&self, height: u32) -> Result<Vec<Bytes32>> {
@@ -157,11 +157,10 @@ impl Database {
     }
 
     pub fn coin_spend(&self, coin_id: Bytes32) -> Result<Option<CoinSpendRecord>> {
-        Ok(self
-            .0
+        self.0
             .get_cf(self.coin_spends_cf(), coin_id.as_ref())?
-            .map(|bytes| pot::from_slice(&bytes))
-            .transpose()?)
+            .map(|bytes| decode::<CoinSpendRecord>(&bytes))
+            .transpose()
     }
 
     pub(super) fn blocks_cf(&self) -> &ColumnFamily {

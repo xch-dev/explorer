@@ -1,7 +1,9 @@
-use anyhow::{bail, Result};
+use anyhow::Result;
 use chia::protocol::Bytes32;
 use rocksdb::WriteBatch;
 use xchdev_types::{BlockRecord, CoinRecord, CoinSpendRecord};
+
+use crate::encode;
 
 use super::Database;
 
@@ -20,7 +22,7 @@ impl<'a> Transaction<'a> {
 
     pub fn insert_block(&mut self, height: u32, row: &BlockRecord) -> Result<()> {
         self.batch
-            .put_cf(self.db.blocks_cf(), height.to_be_bytes(), pot::to_vec(row)?);
+            .put_cf(self.db.blocks_cf(), height.to_be_bytes(), encode(row)?);
 
         self.batch.put_cf(
             self.db.block_hashes_cf(),
@@ -34,8 +36,7 @@ impl<'a> Transaction<'a> {
     pub fn insert_coin(&mut self, row: &CoinRecord) -> Result<()> {
         let coin_id = row.coin.coin_id();
 
-        self.batch
-            .put_cf(self.db.coins_cf(), coin_id, pot::to_vec(row)?);
+        self.batch.put_cf(self.db.coins_cf(), coin_id, encode(row)?);
 
         self.index_coin_height(row.created_height, coin_id);
         self.index_coin_parent(row.coin.parent_coin_info, coin_id);
@@ -47,7 +48,7 @@ impl<'a> Transaction<'a> {
         let coin_id = row.coin.coin_id();
 
         self.batch
-            .put_cf(self.db.coin_spends_cf(), coin_id, pot::to_vec(row)?);
+            .put_cf(self.db.coin_spends_cf(), coin_id, encode(row)?);
 
         self.index_coin_height(row.spent_height, coin_id);
 

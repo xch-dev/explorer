@@ -10,8 +10,8 @@ use itertools::Itertools;
 use rocksdb::Direction;
 use serde::{Deserialize, Serialize};
 use tower_http::cors::{Any, CorsLayer};
-
-use crate::db::{BlockRow, CoinRow, Database};
+use xchdev_db::Database;
+use xchdev_types::{BlockRecord, CoinRecord};
 
 #[derive(Clone)]
 pub struct App {
@@ -40,14 +40,14 @@ pub fn router(app: App) -> Router {
 pub struct Coin {
     pub coin_id: Bytes32,
     #[serde(flatten)]
-    pub row: CoinRow,
+    pub row: CoinRecord,
 }
 
 #[derive(Serialize)]
 pub struct Block {
     pub height: u32,
     #[serde(flatten)]
-    pub row: BlockRow,
+    pub row: BlockRecord,
 }
 
 #[derive(Serialize)]
@@ -188,7 +188,7 @@ async fn coins_by_parent(
     State(app): State<App>,
     Path(coin_id): Path<Bytes32>,
 ) -> Result<Json<CoinsResponse>, StatusCode> {
-    let coins = app.db.coins_by_parent_id(coin_id).unwrap();
+    let coins = app.db.coins_by_parent(coin_id).unwrap();
 
     let coins = coins
         .into_iter()

@@ -6,8 +6,8 @@ edition = "2021"
 [dependencies]
 xchdev-types = { workspace = true }
 chia = { workspace = true }
-serde = { workspace = true, features = ["derive"] }
 rocksdb = { workspace = true }
 anyhow = { workspace = true }
 num_cpus = { workspace = true }
-pot = { workspace = true }
+ciborium = { workspace = true }
+serde = { workspace = true }

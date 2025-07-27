@@ -1,24 +1,19 @@
 mod config;
-mod db;
-mod process;
 mod routes;
 mod sync;
 
-use std::{fs, io::Cursor};
+use std::fs;
 
 use anyhow::Result;
-use chia::{protocol::FullBlock, traits::Streamable};
 use chia_wallet_sdk::coinset::FullNodeClient;
 use config::Config;
-use db::Database;
-use rayon::iter::{IntoParallelIterator, ParallelIterator};
 use routes::{router, App};
 use sqlx::SqlitePool;
 use sync::Sync;
 use tokio::net::TcpListener;
 use tracing::{error, info};
 use tracing_subscriber::EnvFilter;
-use zstd::decode_all;
+use xchdev_db::Database;
 
 #[tokio::main]
 async fn main() -> Result<()> {
@@ -57,11 +52,4 @@ async fn main() -> Result<()> {
     axum::serve(listener, app).await?;
 
     Ok(())
-}
-
-fn parse_blocks(blocks: Vec<Vec<u8>>) -> Vec<FullBlock> {
-    blocks
-        .into_par_iter()
-        .map(|data| FullBlock::from_bytes(&decode_all(Cursor::new(data)).unwrap()).unwrap())
-        .collect()
 }

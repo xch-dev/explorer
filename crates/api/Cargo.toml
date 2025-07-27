@@ -2,3 +2,28 @@
 name = "xchdev-api"
 version = "0.1.0"
 edition = "2021"
+
+[dependencies]
+xchdev-types = { workspace = true }
+xchdev-db = { workspace = true }
+xchdev-parser = { workspace = true }
+
+chia-wallet-sdk = { workspace = true, features = ["native-tls"] }
+chia = { workspace = true }
+
+anyhow = { workspace = true }
+zstd = { workspace = true }
+tokio = { workspace = true, features = ["full"] }
+rayon = { workspace = true }
+sqlx = { workspace = true }
+tracing = { workspace = true }
+tracing-subscriber = { workspace = true }
+topk8 = { workspace = true }
+axum = { workspace = true }
+indexmap = { workspace = true }
+itertools = { workspace = true }
+tower-http = { workspace = true }
+serde = { workspace = true }
+rocksdb = { workspace = true }
+homedir = { workspace = true }
+toml = { workspace = true }

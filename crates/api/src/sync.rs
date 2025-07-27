@@ -4,16 +4,19 @@ use std::time::Instant;
 
 use anyhow::Result;
 use chia::{protocol::FullBlock, traits::Streamable};
-use chia_wallet_sdk::coinset::{ChiaRpcClient, FullNodeClient};
+use chia_wallet_sdk::{
+    coinset::{ChiaRpcClient, FullNodeClient},
+    prelude::Allocator,
+};
+use indexmap::IndexMap;
 use rayon::iter::{IntoParallelIterator, ParallelIterator};
 use sqlx::{Row, SqlitePool};
 use tracing::debug;
+use xchdev_db::Database;
+use xchdev_parser::parse_block;
 use zstd::decode_all;
 
 use crate::config::Config;
-use crate::db::{CoinSpend, Database};
-use crate::parse_blocks;
-use crate::process::process_blocks;
 
 pub struct Sync {
     db: Database,
@@ -42,7 +45,11 @@ impl Sync {
             .peak
             .height;
 
-        let mut sync_height = self.db.peak().unwrap().map_or(0, |(height, _)| height + 1);
+        let mut sync_height = self
+            .db
+            .peak()
+            .unwrap()
+            .map_or(7000000, |(height, _)| height + 1);
 
         let mut instant = Instant::now();
         let mut blocks_processed = 0;
@@ -74,7 +81,7 @@ impl Sync {
             }
 
             let response = sqlx::query(&format!(
-                "SELECT block FROM full_blocks WHERE in_main_chain = 1 AND height IN ({})",
+                "SELECT block FROM full_blocks WHERE in_main_chain = 1 AND height IN ({}) ORDER BY height ASC",
                 (sync_height..sync_height + self.config.batch_size)
                     .map(|h| h.to_string())
                     .collect::<Vec<String>>()
@@ -114,7 +121,14 @@ impl Sync {
 
             let process_start = Instant::now();
 
-            let mut insertions = process_blocks(blocks, refs);
+            let parsed = blocks
+                .into_par_iter()
+                .map(|block| {
+                    let mut allocator = Allocator::new();
+                    parse_block(&mut allocator, &block, &refs)
+                })
+                .collect::<xchdev_parser::Result<Vec<_>>>()
+                .unwrap();
 
             let process_duration = process_start.elapsed();
 
@@ -124,47 +138,42 @@ impl Sync {
 
             let mut block_inserts = 0;
             let mut coin_inserts = 0;
-            let mut cat_tail_inserts = 0;
             let mut coin_spend_inserts = 0;
 
-            for (height, block) in insertions.blocks {
-                tx.create_block(height, &block)?;
+            let mut created_coins = IndexMap::new();
+
+            for item in parsed {
+                tx.insert_block(item.block_record.height, &item.block_record)?;
                 block_inserts += 1;
-            }
 
-            for (coin_id, mut coin) in insertions.coins {
-                if let Some(item) = insertions.coin_spends.shift_remove(&coin_id) {
-                    coin.spend = Some(CoinSpend {
-                        spent_height: item.spent_height,
-                        puzzle_reveal: item.puzzle_reveal,
-                        solution: item.solution,
-                    });
-
-                    if let Some(kind) = item.kind {
-                        coin.kind = Some(kind);
-                    }
-
-                    if let Some(p2_puzzle) = item.p2_puzzle {
-                        coin.p2_puzzle = Some(p2_puzzle);
-                    }
+                for coin_record in item.additions {
+                    created_coins.insert(coin_record.coin.coin_id(), coin_record);
                 }
 
-                tx.create_coin(&coin)?;
-                coin_inserts += 1;
+                for update in item.updates {
+                    tx.insert_coin_spend(&update.spend)?;
+                    coin_spend_inserts += 1;
+
+                    let coin_id = update.spend.coin.coin_id();
+
+                    let Some(coin_record) = created_coins.get_mut(&coin_id) else {
+                        let Some(mut coin_record) = self.db.coin(coin_id)? else {
+                            continue;
+                        };
+
+                        update.apply(&mut coin_record);
+                        tx.insert_coin(&coin_record)?;
+
+                        continue;
+                    };
+
+                    update.apply(coin_record);
+                }
             }
 
-            for (coin_id, item) in insertions.coin_spends {
-                tx.spend_coin(
-                    coin_id,
-                    CoinSpend {
-                        spent_height: item.spent_height,
-                        puzzle_reveal: item.puzzle_reveal,
-                        solution: item.solution,
-                    },
-                    item.kind,
-                    item.p2_puzzle,
-                )?;
-                coin_spend_inserts += 1;
+            for coin_record in created_coins.into_values() {
+                tx.insert_coin(&coin_record)?;
+                coin_inserts += 1;
             }
 
             tx.commit()?;
@@ -188,8 +197,8 @@ impl Sync {
             );
 
             debug!(
-                "{} blocks, {} coins, {} tails, {} spends",
-                block_inserts, coin_inserts, cat_tail_inserts, coin_spend_inserts
+                "{} blocks, {} coins, {} spends",
+                block_inserts, coin_inserts, coin_spend_inserts
             );
 
             debug!("Synced to height {}\n", sync_height);
@@ -197,4 +206,11 @@ impl Sync {
 
         Ok(())
     }
+}
+
+fn parse_blocks(blocks: Vec<Vec<u8>>) -> Vec<FullBlock> {
+    blocks
+        .into_par_iter()
+        .map(|data| FullBlock::from_bytes(&decode_all(Cursor::new(data)).unwrap()).unwrap())
+        .collect()
 }

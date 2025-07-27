@@ -1,5 +1,6 @@
 [workspace]
 members = ["crates/*"]
+resolver = "2"
 
 [workspace.dependencies]
 xchdev-api = { path = "crates/api" }
@@ -16,19 +17,18 @@ thiserror = "2.0.12"
 serde = "1.0.219"
 anyhow = "1.0.97"
 num_cpus = "1.16.0"
-pot = "3.0.1"
-
-sqlx = { version = "0.8.3", features = ["runtime-tokio", "sqlite"] }
-tokio = { version = "1.44.1", features = ["full"] }
+ciborium = "0.2.2"
 zstd = "0.13.3"
+tokio = "1.44.1"
 rayon = "1.10.0"
-chia-puzzles = "0.20.1"
+sqlx = { version = "0.8.3", features = ["runtime-tokio", "sqlite"] }
 tracing = "0.1.41"
 tracing-subscriber = { version = "0.3.19", features = ["env-filter"] }
+topk8 = { git = "https://github.com/xch-dev/topk8" }
 axum = { version = "0.8.1", features = ["macros"] }
-itertools = "0.14.0"
-tower-http = { version = "0.6.2", features = ["cors"] }
 indexmap = "2.8.0"
+tower-http = { version = "0.6.2", features = ["cors"] }
+itertools = "0.14.0"
 homedir = "0.3.4"
 toml = "0.8.20"
-topk8 = { git = "https://github.com/xch-dev/topk8" }
+hex = "0.4.3"

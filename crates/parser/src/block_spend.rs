@@ -25,6 +25,13 @@ pub struct UpdatedCoin {
     pub kind: CoinType,
 }
 
+impl UpdatedCoin {
+    pub fn apply(self, coin_record: &mut CoinRecord) {
+        coin_record.spent_height = Some(self.spend.spent_height);
+        coin_record.kind = self.kind;
+    }
+}
+
 #[derive(Debug, Default, Clone)]
 struct Cache {
     child_cats: Vec<Cat>,
