@@ -3,7 +3,6 @@ use std::io::Cursor;
 use std::time::Instant;
 
 use anyhow::Result;
-use chia::protocol::Bytes;
 use chia::{protocol::FullBlock, traits::Streamable};
 use chia_wallet_sdk::coinset::{ChiaRpcClient, FullNodeClient};
 use rayon::iter::{IntoParallelIterator, ParallelIterator};
@@ -12,9 +11,9 @@ use tracing::debug;
 use zstd::decode_all;
 
 use crate::config::Config;
-use crate::db::{CoinSpendRow, Database};
+use crate::db::{CoinSpend, Database};
 use crate::parse_blocks;
-use crate::process::{process_blocks, Insertion};
+use crate::process::process_blocks;
 
 pub struct Sync {
     db: Database,
@@ -43,7 +42,7 @@ impl Sync {
             .peak
             .height;
 
-        let mut sync_height = self.db.peak_height()?.unwrap_or(0);
+        let mut sync_height = self.db.peak().unwrap().map_or(0, |(height, _)| height + 1);
 
         let mut instant = Instant::now();
         let mut blocks_processed = 0;
@@ -100,8 +99,7 @@ impl Sync {
                     }
 
                     let response = sqlx::query(&format!(
-                        "SELECT block FROM full_blocks WHERE in_main_chain = 1 AND height = {}",
-                        ref_block
+                        "SELECT block FROM full_blocks WHERE in_main_chain = 1 AND height = {ref_block}"
                     ))
                     .fetch_one(&self.sqlite)
                     .await?;
@@ -129,48 +127,45 @@ impl Sync {
             let mut cat_tail_inserts = 0;
             let mut coin_spend_inserts = 0;
 
-            insertions.sort();
-
-            for insertion in insertions {
-                match insertion {
-                    Insertion::Block { block, height } => {
-                        tx.put_block(height, &block)?;
-
-                        block_inserts += 1;
-                    }
-                    Insertion::Coin { coin, coin_id } => {
-                        tx.put_coin(coin_id, &coin)?;
-
-                        coin_inserts += 1;
-                    }
-                    Insertion::CatTail { asset_id, tail } => {
-                        tx.put_tail(asset_id, &Bytes::new(tail))?;
-
-                        cat_tail_inserts += 1;
-                    }
-                    Insertion::CoinSpend {
-                        coin_id,
-                        puzzle_reveal,
-                        solution,
-                        spent_height,
-                    } => {
-                        tx.put_coin_spend(
-                            coin_id,
-                            &CoinSpendRow {
-                                spent_height,
-                                puzzle_reveal: Bytes::new(puzzle_reveal),
-                                solution: Bytes::new(solution),
-                            },
-                        )?;
-
-                        tx.add_to_spent_height_index(spent_height, coin_id)?;
-
-                        coin_spend_inserts += 1;
-                    }
-                }
+            for (height, block) in insertions.blocks {
+                tx.create_block(height, &block)?;
+                block_inserts += 1;
             }
 
-            tx.set_peak_height(sync_height)?;
+            for (coin_id, mut coin) in insertions.coins {
+                if let Some(item) = insertions.coin_spends.shift_remove(&coin_id) {
+                    coin.spend = Some(CoinSpend {
+                        spent_height: item.spent_height,
+                        puzzle_reveal: item.puzzle_reveal,
+                        solution: item.solution,
+                    });
+
+                    if let Some(kind) = item.kind {
+                        coin.kind = Some(kind);
+                    }
+
+                    if let Some(p2_puzzle) = item.p2_puzzle {
+                        coin.p2_puzzle = Some(p2_puzzle);
+                    }
+                }
+
+                tx.create_coin(&coin)?;
+                coin_inserts += 1;
+            }
+
+            for (coin_id, item) in insertions.coin_spends {
+                tx.spend_coin(
+                    coin_id,
+                    CoinSpend {
+                        spent_height: item.spent_height,
+                        puzzle_reveal: item.puzzle_reveal,
+                        solution: item.solution,
+                    },
+                    item.kind,
+                    item.p2_puzzle,
+                )?;
+                coin_spend_inserts += 1;
+            }
 
             tx.commit()?;
 

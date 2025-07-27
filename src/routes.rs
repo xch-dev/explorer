@@ -4,7 +4,7 @@ use axum::{
     routing::get,
     Json, Router,
 };
-use chia::protocol::{Bytes, Bytes32};
+use chia::protocol::Bytes32;
 use indexmap::IndexMap;
 use itertools::Itertools;
 use rocksdb::Direction;
@@ -41,7 +41,6 @@ pub struct Coin {
     pub coin_id: Bytes32,
     #[serde(flatten)]
     pub row: CoinRow,
-    pub spent_height: Option<u32>,
 }
 
 #[derive(Serialize)]
@@ -57,7 +56,7 @@ pub struct StateResponse {
 }
 
 async fn state(State(app): State<App>) -> Result<Json<StateResponse>, StatusCode> {
-    let height = app.db.peak_height().unwrap().unwrap_or(0);
+    let height = app.db.peak().unwrap().map_or(0, |block| block.0);
 
     Ok(Json(StateResponse {
         peak_height: height,
@@ -70,16 +69,12 @@ pub struct BlockResponse {
 }
 
 async fn latest_block(State(app): State<App>) -> Result<Json<BlockResponse>, StatusCode> {
-    let Some(height) = app.db.peak_height().unwrap() else {
-        return Err(StatusCode::NOT_FOUND);
-    };
-
-    let Some(block) = app.db.block(height).unwrap() else {
+    let Some((height, row)) = app.db.peak().unwrap() else {
         return Err(StatusCode::NOT_FOUND);
     };
 
     Ok(Json(BlockResponse {
-        block: Block { height, row: block },
+        block: Block { height, row },
     }))
 }
 
@@ -116,14 +111,14 @@ async fn block_by_hash(
 #[derive(Deserialize)]
 pub struct BlocksRequest {
     #[serde(default = "default_limit")]
-    pub limit: u32,
+    pub limit: usize,
     #[serde(default)]
     pub start: Option<u32>,
     #[serde(default)]
     pub reverse: bool,
 }
 
-fn default_limit() -> u32 {
+fn default_limit() -> usize {
     50
 }
 
@@ -136,43 +131,23 @@ async fn blocks(
     State(app): State<App>,
     Query(query): Query<BlocksRequest>,
 ) -> Result<Json<BlocksResponse>, StatusCode> {
-    let (start, end) = if query.reverse {
-        let end = query
-            .start
-            .unwrap_or(app.db.peak_height().unwrap().unwrap_or(0));
-        let start = end.saturating_sub(query.limit);
-        (start, end)
-    } else {
-        let start = query.start.unwrap_or(0);
-        let end = start + query.limit;
-        (start, end)
-    };
-
     let blocks = app
         .db
-        .blocks_range(
-            start,
-            end,
+        .blocks(
+            query.start,
             if query.reverse {
                 Direction::Reverse
             } else {
                 Direction::Forward
             },
+            query.limit,
         )
         .unwrap();
 
     Ok(Json(BlocksResponse {
         blocks: blocks
             .into_iter()
-            .enumerate()
-            .map(|(offset, block)| Block {
-                height: if query.reverse {
-                    end - offset as u32
-                } else {
-                    start + offset as u32
-                },
-                row: block,
-            })
+            .map(|(height, row)| Block { height, row })
             .collect_vec(),
     }))
 }
@@ -192,12 +167,7 @@ async fn coins_by_block(
 
     let mut coins = IndexMap::new();
 
-    for coin_id in [
-        app.db.coins_by_created_height(height).unwrap(),
-        app.db.coins_by_spent_height(height).unwrap(),
-    ]
-    .concat()
-    {
+    for coin_id in app.db.coins_by_height(height).unwrap() {
         if coins.contains_key(&coin_id) {
             continue;
         }
@@ -206,16 +176,7 @@ async fn coins_by_block(
             continue;
         };
 
-        let spend = app.db.coin_spend(coin_id).unwrap();
-
-        coins.insert(
-            coin_id,
-            Coin {
-                coin_id,
-                row: coin,
-                spent_height: spend.map(|spend| spend.spent_height),
-            },
-        );
+        coins.insert(coin_id, Coin { coin_id, row: coin });
     }
 
     Ok(Json(CoinsResponse {
@@ -227,18 +188,13 @@ async fn coins_by_parent(
     State(app): State<App>,
     Path(coin_id): Path<Bytes32>,
 ) -> Result<Json<CoinsResponse>, StatusCode> {
-    let coins = app.db.coins_by_parent_coin_id(coin_id).unwrap();
+    let coins = app.db.coins_by_parent_id(coin_id).unwrap();
 
     let coins = coins
         .into_iter()
         .filter_map(|coin_id| {
             let row = app.db.coin(coin_id).unwrap()?;
-            let spend = app.db.coin_spend(coin_id).unwrap();
-            Some(Coin {
-                coin_id,
-                row,
-                spent_height: spend.map(|spend| spend.spent_height),
-            })
+            Some(Coin { coin_id, row })
         })
         .collect_vec();
 
@@ -248,36 +204,17 @@ async fn coins_by_parent(
 #[derive(Serialize)]
 pub struct CoinResponse {
     pub coin: Coin,
-    pub puzzle_reveal: Option<Bytes>,
-    pub solution: Option<Bytes>,
 }
 
 async fn coin_by_id(
     State(app): State<App>,
     Path(coin_id): Path<Bytes32>,
 ) -> Result<Json<CoinResponse>, StatusCode> {
-    let Some(coin) = app.db.coin(coin_id).unwrap() else {
+    let Some(row) = app.db.coin(coin_id).unwrap() else {
         return Err(StatusCode::NOT_FOUND);
     };
 
-    let (puzzle_reveal, solution, spent_height) =
-        if let Some(spend) = app.db.coin_spend(coin_id).unwrap() {
-            (
-                Some(spend.puzzle_reveal),
-                Some(spend.solution),
-                Some(spend.spent_height),
-            )
-        } else {
-            (None, None, None)
-        };
-
     Ok(Json(CoinResponse {
-        coin: Coin {
-            coin_id,
-            row: coin,
-            spent_height,
-        },
-        puzzle_reveal,
-        solution,
+        coin: Coin { coin_id, row },
     }))
 }

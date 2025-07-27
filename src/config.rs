@@ -37,10 +37,15 @@ impl Config {
         let home_dir = homedir::my_home().unwrap().unwrap();
         let config_path = home_dir.join(".xchdev").join("config.toml");
 
-        if let Ok(config) = fs::read_to_string(config_path) {
+        if let Ok(config) = fs::read_to_string(&config_path) {
             Ok(toml::from_str(&config)?)
         } else {
-            Ok(Config::default())
+            if let Some(parent) = config_path.parent() {
+                fs::create_dir_all(parent)?;
+            }
+            let config = Config::default();
+            fs::write(&config_path, toml::to_string_pretty(&config)?)?;
+            Ok(config)
         }
     }
 }

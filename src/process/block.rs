@@ -2,7 +2,7 @@ use std::collections::HashMap;
 
 use chia::{
     clvm_utils::tree_hash,
-    consensus::gen::{
+    consensus::{
         get_puzzle_and_solution::parse_coin_spend,
         run_block_generator::setup_generator_args,
         validation_error::{first, next, ValidationErr},
@@ -13,34 +13,42 @@ use chia_wallet_sdk::types::run_puzzle;
 use clvmr::{serde::node_from_bytes_backrefs, Allocator, NodePtr};
 use rayon::iter::{IntoParallelIterator, ParallelIterator};
 
-use crate::db::{BlockRow, CoinRow, CoinType, TransactionInfo};
+use crate::{
+    db::{BlockRow, CoinKind, CoinRow, TransactionInfo},
+    process::Insertions,
+};
 
-use super::{process_coin_spend, Insertion};
+use super::process_coin_spend;
 
-pub fn process_blocks(blocks: Vec<FullBlock>, refs: HashMap<u32, FullBlock>) -> Vec<Insertion> {
+pub fn process_blocks(blocks: Vec<FullBlock>, refs: HashMap<u32, FullBlock>) -> Insertions {
+    let mut insertions = Insertions::new();
+
     blocks
         .into_par_iter()
         .map(|block| process_block(block, &refs))
-        .flatten()
-        .collect()
+        .collect::<Vec<_>>()
+        .into_iter()
+        .for_each(|item| insertions.extend(item));
+
+    insertions
 }
 
-fn process_block(block: FullBlock, refs: &HashMap<u32, FullBlock>) -> Vec<Insertion> {
-    let mut insertions = Vec::new();
+fn process_block(block: FullBlock, refs: &HashMap<u32, FullBlock>) -> Insertions {
+    let mut insertions = Insertions::new();
 
     for coin in block.get_included_reward_coins() {
-        insertions.push(Insertion::Coin {
-            coin: Box::new(CoinRow {
-                parent_coin_id: coin.parent_coin_info,
-                puzzle_hash: coin.puzzle_hash,
-                amount: coin.amount,
+        insertions.coins.insert(
+            coin.coin_id(),
+            CoinRow {
+                coin,
                 created_height: block.height(),
+                spend: None,
                 hint: None,
                 memos: None,
-                kind: CoinType::Reward,
-            }),
-            coin_id: coin.coin_id(),
-        });
+                kind: Some(CoinKind::Reward),
+                p2_puzzle: None,
+            },
+        );
     }
 
     let mut additions = 0;
@@ -81,8 +89,9 @@ fn process_block(block: FullBlock, refs: &HashMap<u32, FullBlock>) -> Vec<Insert
 
     let height = block.height();
 
-    insertions.push(Insertion::Block {
-        block: Box::new(BlockRow {
+    insertions.blocks.insert(
+        height,
+        BlockRow {
             header_hash: block.header_hash(),
             weight: block.weight(),
             total_iters: block.total_iters(),
@@ -107,9 +116,8 @@ fn process_block(block: FullBlock, refs: &HashMap<u32, FullBlock>) -> Vec<Insert
             } else {
                 None
             },
-        }),
-        height,
-    });
+        },
+    );
 
     insertions
 }

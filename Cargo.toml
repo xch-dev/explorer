@@ -1,13 +1,11 @@
-[package]
-name = "postgresy"
-version = "0.1.0"
-edition = "2021"
+[workspace]
+members = ["crates/*"]
 
-[dependencies]
+[workspace.dependencies]
 anyhow = "1.0.97"
-chia = "0.20.0"
-chia-wallet-sdk = { git = "https://github.com/xch-dev/chia-wallet-sdk", features = ["native-tls"] }
-clvmr = "0.12.0"
+chia = "0.26.0"
+chia-wallet-sdk = { path = "../wallet-sdk", features = ["native-tls"] }
+clvmr = "0.14.0"
 num_cpus = "1.16.0"
 rocksdb = "0.23.0"
 sqlx = { version = "0.8.3", features = ["runtime-tokio", "sqlite"] }

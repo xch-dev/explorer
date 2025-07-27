@@ -41,7 +41,7 @@ async fn main() -> Result<()> {
     let cert = fs::read(&config.cert_path)?;
     let key = fs::read_to_string(&config.key_path)?;
     let key = topk8::from_pkcs1_pem(&key).unwrap_or(key);
-    let rpc = FullNodeClient::new(&cert, key.as_bytes());
+    let rpc = FullNodeClient::new(&cert, key.as_bytes())?;
 
     let sync = Sync::new(db.clone(), config.clone(), sqlite, rpc);
 
