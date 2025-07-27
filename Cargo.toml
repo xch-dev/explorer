@@ -24,3 +24,4 @@ indexmap = "2.8.0"
 homedir = "0.3.4"
 toml = "0.8.20"
 topk8 = { git = "https://github.com/xch-dev/topk8" }
+thiserror = "2.0.12"

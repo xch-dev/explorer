@@ -2,3 +2,9 @@
 name = "xchdev-parser"
 version = "0.1.0"
 edition = "2021"
+
+[dependencies]
+chia-wallet-sdk = { workspace = true }
+chia = { workspace = true }
+clvmr = { workspace = true }
+thiserror = { workspace = true }
