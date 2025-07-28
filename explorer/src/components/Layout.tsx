@@ -6,7 +6,7 @@ export function Layout({ children }: PropsWithChildren) {
     <div>
       <Nav />
 
-      <div className='p-4'>{children}</div>
+      <div className='max-w-5xl mx-auto p-8'>{children}</div>
     </div>
   );
 }
