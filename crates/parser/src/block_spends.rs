@@ -13,9 +13,9 @@ use xchdev_types::{CoinRecord, CoinSpendRecord, CoinType};
 
 use crate::{BlockSpend, Result};
 
-#[derive(Debug, Clone)]
-pub struct ParsedBlockSpend {
-    pub update: UpdatedCoin,
+#[derive(Debug, Default, Clone)]
+pub struct ParsedBlockSpends {
+    pub updates: Vec<UpdatedCoin>,
     pub additions: Vec<CoinRecord>,
 }
 
@@ -37,27 +37,28 @@ struct Cache {
     child_cats: Vec<Cat>,
 }
 
-pub fn parse_block_spend(
+pub fn parse_block_spends(
     allocator: &mut Allocator,
     height: u32,
-    spend: BlockSpend,
-) -> Result<ParsedBlockSpend> {
-    let (update, cache) = parse_updated_coin(allocator, height, spend)?;
+    spends: Vec<BlockSpend>,
+) -> Result<ParsedBlockSpends> {
+    let mut result = ParsedBlockSpends::default();
 
-    let mut result = ParsedBlockSpend {
-        update,
-        additions: Vec::new(),
-    };
+    for spend in spends {
+        let (update, cache) = parse_updated_coin(allocator, height, spend)?;
 
-    let output = run_puzzle(allocator, spend.puzzle.ptr(), spend.solution)?;
-    let conditions = Vec::<Condition>::from_clvm(allocator, output)?;
+        result.updates.push(update);
 
-    for condition in conditions {
-        let Some(create_coin) = condition.into_create_coin() else {
-            continue;
-        };
+        let output = run_puzzle(allocator, spend.puzzle.ptr(), spend.solution)?;
+        let conditions = Vec::<Condition>::from_clvm(allocator, output)?;
 
-        parse_child_coin(allocator, &mut result, spend, &cache, create_coin)?;
+        for condition in conditions {
+            let Some(create_coin) = condition.into_create_coin() else {
+                continue;
+            };
+
+            parse_child_coin(allocator, height, &mut result, spend, &cache, create_coin)?;
+        }
     }
 
     Ok(result)
@@ -126,7 +127,8 @@ fn parse_updated_coin(
 
 fn parse_child_coin(
     allocator: &mut Allocator,
-    parsed: &mut ParsedBlockSpend,
+    height: u32,
+    parsed: &mut ParsedBlockSpends,
     spend: BlockSpend,
     cache: &Cache,
     create_coin: CreateCoin<NodePtr>,
@@ -186,7 +188,7 @@ fn parse_child_coin(
 
     parsed.additions.push(CoinRecord {
         coin,
-        created_height: parsed.update.spend.spent_height,
+        created_height: height,
         spent_height: None,
         hint,
         serialized_memos: remaining_memos

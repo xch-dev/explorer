@@ -1,7 +1,7 @@
 mod block;
-mod block_spend;
+mod block_spends;
 mod error;
 
 pub use block::*;
-pub use block_spend::*;
+pub use block_spends::*;
 pub use error::*;

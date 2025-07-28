@@ -6,13 +6,13 @@ use chia::{
         run_block_generator::setup_generator_args,
         validation_error::{first, next},
     },
-    protocol::{Bytes32, Coin, FullBlock},
+    protocol::{Coin, FullBlock},
 };
 use chia_wallet_sdk::{driver::Puzzle, types::run_puzzle};
 use clvmr::{serde::node_from_bytes_backrefs, Allocator, NodePtr};
 use xchdev_types::{BlockRecord, CoinRecord, CoinType, TransactionInfo};
 
-use crate::{parse_block_spend, Error, Result, UpdatedCoin};
+use crate::{parse_block_spends, Error, Result, UpdatedCoin};
 
 #[derive(Debug, Clone, Copy)]
 pub struct BlockSpend {
@@ -64,19 +64,25 @@ pub fn parse_block(
 
         let args = setup_generator_args(allocator, block_refs)?;
         let result = run_puzzle(allocator, generator, args)?;
-        let spends = parse_block_spends(allocator, result)?;
 
-        for (parent, amount, puzzle, solution) in spends {
+        let mut iter = first(allocator, result)?;
+        let mut spends = Vec::new();
+
+        while let Some((coin_spend, next)) = next(allocator, iter)? {
+            iter = next;
+            let (parent, amount, puzzle, solution) = parse_consensus_spend(allocator, coin_spend)?;
+            let parent = parent.as_ref().try_into()?;
             let puzzle = Puzzle::parse(allocator, puzzle);
-            let spend = BlockSpend {
+            spends.push(BlockSpend {
                 coin: Coin::new(parent, puzzle.curried_puzzle_hash().into(), amount),
                 puzzle,
                 solution,
-            };
-            let result = parse_block_spend(allocator, block.height(), spend)?;
-            updates.push(result.update);
-            additions.extend(result.additions);
+            });
         }
+
+        let spends = parse_block_spends(allocator, block.height(), spends)?;
+        updates.extend(spends.updates);
+        additions.extend(spends.additions);
     }
 
     let block_record = BlockRecord {
@@ -112,20 +118,4 @@ pub fn parse_block(
         updates,
         additions,
     })
-}
-
-fn parse_block_spends(
-    allocator: &Allocator,
-    generator_result: NodePtr,
-) -> Result<Vec<(Bytes32, u64, NodePtr, NodePtr)>> {
-    let mut iter = first(allocator, generator_result)?;
-    let mut spends = Vec::new();
-
-    while let Some((coin_spend, next)) = next(allocator, iter)? {
-        iter = next;
-        let (parent, amount, puzzle, solution) = parse_consensus_spend(allocator, coin_spend)?;
-        spends.push((parent.as_ref().try_into()?, amount, puzzle, solution));
-    }
-
-    Ok(spends)
 }
