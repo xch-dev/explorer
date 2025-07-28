@@ -1,6 +1,7 @@
 import { External } from '@/components/External';
 import { Layout } from '@/components/Layout';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
+import { useDexie } from '@/hooks/useDexie';
 import { BlockRecord, CoinRecord, getBlock, getCoins } from '@/lib/api';
 import { toDecimal } from '@/lib/conversions';
 import { intlFormat } from 'date-fns';
@@ -108,7 +109,7 @@ export function Block() {
 
             <div className='grid gap-3 sm:grid-cols-2 lg:grid-cols-3'>
               {coins.map((coin) => (
-                <CoinCard key={coin.coin_id} coinRecord={coin} />
+                <CoinCard key={coin.coin_id} coinRecord={coin} block={block} />
               ))}
             </div>
           </section>
@@ -151,18 +152,72 @@ function Field({ label, value }: FieldProps) {
 
 interface CoinCardProps {
   coinRecord: CoinRecord;
+  block: BlockRecord | null;
 }
 
-function CoinCard({ coinRecord }: CoinCardProps) {
+function CoinCard({ coinRecord, block }: CoinCardProps) {
+  const { tokens } = useDexie();
+  const isCreated = coinRecord.created_height === block?.height;
+  const isSpent = coinRecord.spent_height === block?.height;
+
+  const token =
+    coinRecord.type === 'cat'
+      ? tokens[coinRecord.asset_id.replace('0x', '')]
+      : coinRecord.type === 'unknown'
+        ? tokens['xch']
+        : null;
+
   return (
-    <div className='p-4 bg-card border rounded-lg flex flex-col gap-2'>
-      <div className='font-mono text-sm'>
-        {coinRecord.coin_id.slice(0, 8)}...{coinRecord.coin_id.slice(-8)}
+    <div
+      className={`
+      bg-card border rounded-lg overflow-hidden
+      ${
+        isCreated && isSpent
+          ? 'border-yellow-500/30'
+          : isCreated
+            ? 'border-green-500/30'
+            : isSpent
+              ? 'border-red-500/30'
+              : 'border-border'
+      }`}
+    >
+      <div className='p-3'>
+        <div className='flex items-center gap-2 mb-1.5'>
+          <div className='font-mono text-xs text-muted-foreground'>
+            {coinRecord.coin_id.slice(0, 8)}...{coinRecord.coin_id.slice(-8)}
+          </div>
+          <div className='flex gap-1 ml-auto'>
+            {isCreated && (
+              <div className='px-1.5 py-0.5 bg-green-500/10 text-green-500 rounded-full text-[10px] font-medium'>
+                Created
+              </div>
+            )}
+            {isSpent && (
+              <div className='px-1.5 py-0.5 bg-red-500/10 text-red-500 rounded-full text-[10px] font-medium'>
+                Spent
+              </div>
+            )}
+          </div>
+        </div>
+        <div className='flex items-center gap-2'>
+          {token?.icon && (
+            <img
+              src={token.icon}
+              alt={token.name}
+              className='w-5 h-5 rounded-full'
+            />
+          )}
+          <div className='font-medium'>
+            {toDecimal(
+              coinRecord.coin.amount,
+              coinRecord.type === 'cat' ? 3 : 12,
+            )}{' '}
+            <span className='text-sm font-normal text-muted-foreground'>
+              {token?.code || (coinRecord.type === 'cat' ? 'CAT' : 'XCH')}
+            </span>
+          </div>
+        </div>
       </div>
-      <div className='text-lg font-medium'>
-        {toDecimal(coinRecord.coin.amount, coinRecord.type === 'cat' ? 3 : 12)}
-      </div>
-      <div className='text-sm text-muted-foreground'>{coinRecord.type}</div>
     </div>
   );
 }

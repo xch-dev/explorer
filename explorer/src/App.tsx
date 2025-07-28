@@ -5,6 +5,7 @@ import {
   RouterProvider,
 } from 'react-router-dom';
 import { DarkModeProvider } from './contexts/DarkModeContext';
+import { DexieProvider } from './contexts/DexieContext';
 import { Block } from './pages/Block';
 import { Home } from './pages/Home';
 
@@ -20,7 +21,9 @@ const router = createBrowserRouter(
 export default function App() {
   return (
     <DarkModeProvider>
-      <RouterProvider router={router} />
+      <DexieProvider>
+        <RouterProvider router={router} />
+      </DexieProvider>
     </DarkModeProvider>
   );
 }
