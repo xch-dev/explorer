@@ -6,6 +6,7 @@ import {
   TooltipTrigger,
 } from '@/components/ui/tooltip';
 import { BlockRecord, getBlocks } from '@/lib/api';
+import { truncateHash } from '@/lib/conversions';
 import { intlFormat, intlFormatDistance } from 'date-fns';
 import { CoinsIcon, HashIcon, LayersIcon } from 'lucide-react';
 import { useEffect, useState } from 'react';
@@ -76,9 +77,7 @@ function Block({ block }: BlockProps) {
 
           <div className='flex items-center gap-2 text-sm text-muted-foreground'>
             <HashIcon className='w-4 h-4' />
-            <div className='font-mono'>
-              {block.header_hash.slice(0, 8)}...{block.header_hash.slice(-8)}
-            </div>
+            <div className='font-mono'>{truncateHash(block.header_hash)}</div>
           </div>
         </div>
 

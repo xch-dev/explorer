@@ -3,7 +3,7 @@ import { Layout } from '@/components/Layout';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { useDexie } from '@/hooks/useDexie';
 import { BlockRecord, CoinRecord, getBlock, getCoins } from '@/lib/api';
-import { toDecimal } from '@/lib/conversions';
+import { toDecimal, truncateHash } from '@/lib/conversions';
 import { intlFormat } from 'date-fns';
 import { CoinsIcon, DatabaseIcon, HashIcon, LayersIcon } from 'lucide-react';
 import { useEffect, useState } from 'react';
@@ -42,95 +42,119 @@ export function Block() {
         )}
       </div>
 
-      {block?.transaction_info && (
+      {block && (
         <div className='space-y-6'>
-          <section className='bg-card border rounded-lg p-6'>
-            <h2 className='text-xl font-medium mb-4 flex items-center gap-2'>
-              <HashIcon className='w-5 h-5' />
-              Block Hashes
-            </h2>
-            <div className='grid gap-3 text-sm'>
-              <Field label='Block Hash' value={block.header_hash} />
-              <Field label='Previous Block' value={block.prev_block_hash} />
-              {block.transaction_info?.prev_transaction_block_hash && (
+          <div className='grid gap-3 lg:grid-cols-2'>
+            <section className='bg-card border rounded-lg p-6'>
+              <h2 className='text-xl font-medium mb-4 flex items-center gap-2'>
+                <HashIcon className='w-5 h-5' />
+                Block Hashes
+              </h2>
+              <div className='grid gap-3 text-sm'>
                 <Field
-                  label='Previous Transaction Block'
-                  value={block.transaction_info.prev_transaction_block_hash}
+                  label='Block Hash'
+                  value={truncateHash(block.header_hash)}
                 />
-              )}
-              <Field
-                label='Farmer Puzzle Hash'
-                value={block.farmer_puzzle_hash}
-              />
-              {block.pool_puzzle_hash && (
                 <Field
-                  label='Pool Puzzle Hash'
-                  value={block.pool_puzzle_hash}
+                  label='Previous Block'
+                  value={truncateHash(block.prev_block_hash)}
                 />
-              )}
-            </div>
-          </section>
-
-          <section className='bg-card border rounded-lg p-6'>
-            <h2 className='text-xl font-medium mb-4 flex items-center gap-2'>
-              <DatabaseIcon className='w-5 h-5' />
-              Block Details
-            </h2>
-            <div className='grid gap-3 text-sm'>
-              <Field
-                label='Total Iterations'
-                value={block.total_iters.toLocaleString()}
-              />
-              <Field label='Weight' value={block.weight.toLocaleString()} />
-              <Field
-                label='Transaction Cost'
-                value={block.transaction_info.cost.toLocaleString()}
-              />
-              <Field
-                label='Transaction Fees'
-                value={`${toDecimal(block.transaction_info.fees, 12)} XCH`}
-              />
-            </div>
-          </section>
-
-          <section>
-            <div className='flex items-center gap-2 mb-4'>
-              <CoinsIcon className='w-5 h-5' />
-              <h2 className='text-xl font-medium'>Coins</h2>
-              <div className='flex items-center gap-1 text-sm ml-2'>
-                <span className='text-green-600'>
-                  +{block.transaction_info.additions}
-                </span>
-                <span className='text-red-500'>
-                  -{block.transaction_info.removals}
-                </span>
+                {block.transaction_info?.prev_transaction_block_hash && (
+                  <Field
+                    label='Previous Transaction Block'
+                    value={truncateHash(
+                      block.transaction_info.prev_transaction_block_hash,
+                    )}
+                  />
+                )}
+                <Field
+                  label='Farmer Puzzle Hash'
+                  value={truncateHash(block.farmer_puzzle_hash)}
+                />
+                {block.pool_puzzle_hash && (
+                  <Field
+                    label='Pool Puzzle Hash'
+                    value={truncateHash(block.pool_puzzle_hash)}
+                  />
+                )}
               </div>
-            </div>
+            </section>
 
-            <div className='grid gap-3 sm:grid-cols-2 lg:grid-cols-3'>
-              {coins.map((coin) => (
-                <CoinCard key={coin.coin_id} coinRecord={coin} block={block} />
-              ))}
-            </div>
-          </section>
+            <section className='bg-card border rounded-lg p-6'>
+              <h2 className='text-xl font-medium mb-4 flex items-center gap-2'>
+                <DatabaseIcon className='w-5 h-5' />
+                Block Details
+              </h2>
+              <div className='grid gap-3 text-sm'>
+                <Field
+                  label='Total Iterations'
+                  value={block.total_iters.toLocaleString()}
+                />
+                <Field label='Weight' value={block.weight.toLocaleString()} />
+                {block.transaction_info && (
+                  <>
+                    <Field
+                      label='Transaction Cost'
+                      value={block.transaction_info.cost.toLocaleString()}
+                    />
+                    <Field
+                      label='Transaction Fees'
+                      value={`${toDecimal(block.transaction_info.fees, 12)} XCH`}
+                    />
+                  </>
+                )}
+              </div>
+            </section>
+          </div>
+
+          {block?.transaction_info ? (
+            <>
+              <div className='flex items-center gap-2 mb-4'>
+                <CoinsIcon className='w-5 h-5' />
+                <h2 className='text-xl font-medium'>Coins</h2>
+                <div className='flex items-center gap-1 text-sm ml-2'>
+                  <span className='text-green-600'>
+                    +{block.transaction_info.additions}
+                  </span>
+                  <span className='text-red-500'>
+                    -{block.transaction_info.removals}
+                  </span>
+                </div>
+              </div>
+
+              <div className='grid gap-3 sm:grid-cols-2 lg:grid-cols-3'>
+                {coins.map((coin) => (
+                  <CoinCard
+                    key={coin.coin_id}
+                    coinRecord={coin}
+                    block={block}
+                  />
+                ))}
+              </div>
+            </>
+          ) : (
+            <>
+              <div className='flex items-center gap-2 mb-4'>
+                <CoinsIcon className='w-5 h-5' />
+                <h2 className='text-xl font-medium'>Coins</h2>
+              </div>
+              <Alert className='mt-3'>
+                <LayersIcon />
+                <AlertTitle>This is a non-transaction block</AlertTitle>
+                <AlertDescription>
+                  <p>
+                    This block doesn't contain any reward coins or transactions.
+                    You can learn more about non-transaction blocks on the{' '}
+                    <External href='https://docs.chia.net/chia-blockchain/consensus/chains/foliage/'>
+                      Chia documentation
+                    </External>
+                    .
+                  </p>
+                </AlertDescription>
+              </Alert>
+            </>
+          )}
         </div>
-      )}
-
-      {!timestamp && (
-        <Alert className='mt-4'>
-          <LayersIcon />
-          <AlertTitle>This is a non-transaction block</AlertTitle>
-          <AlertDescription>
-            <p>
-              This block doesn't contain any reward coins or transactions. You
-              can learn more about non-transaction blocks on the{' '}
-              <External href='https://docs.chia.net/chia-blockchain/consensus/chains/foliage/'>
-                Chia documentation
-              </External>
-              .
-            </p>
-          </AlertDescription>
-        </Alert>
       )}
     </Layout>
   );
@@ -184,7 +208,7 @@ function CoinCard({ coinRecord, block }: CoinCardProps) {
       <div className='p-3'>
         <div className='flex items-center gap-2 mb-1.5'>
           <div className='font-mono text-xs text-muted-foreground'>
-            {coinRecord.coin_id.slice(0, 8)}...{coinRecord.coin_id.slice(-8)}
+            {truncateHash(coinRecord.coin_id)}
           </div>
           <div className='flex gap-1 ml-auto'>
             {isCreated && (

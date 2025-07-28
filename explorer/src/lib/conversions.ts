@@ -12,3 +12,7 @@ export function toBigNumber(
 ): BigNumber {
   return BigNumber(amount).dividedBy(BigNumber(10).pow(decimals));
 }
+
+export function truncateHash(hash: string): string {
+  return hash.slice(0, 8) + '...' + hash.slice(-8);
+}
