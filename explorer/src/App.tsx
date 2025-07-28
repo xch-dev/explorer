@@ -1,12 +1,24 @@
-import { Button } from './components/ui/button';
+import {
+  createBrowserRouter,
+  createRoutesFromElements,
+  Route,
+  RouterProvider,
+} from 'react-router-dom';
 import { DarkModeProvider } from './contexts/DarkModeContext';
+import { Home } from './pages/Home';
 
-function App() {
+const router = createBrowserRouter(
+  createRoutesFromElements(
+    <>
+      <Route path='/' element={<Home />} />
+    </>,
+  ),
+);
+
+export default function App() {
   return (
     <DarkModeProvider>
-      <Button>Hello</Button>
+      <RouterProvider router={router} />
     </DarkModeProvider>
   );
 }
-
-export default App;
