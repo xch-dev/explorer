@@ -4,6 +4,7 @@ import { Textarea } from '@/components/ui/textarea';
 import { parseJson } from '@/lib/json';
 import {
   ConditionArgType,
+  ConditionType,
   ParsedCoin,
   ParsedCoinSpend,
   ParsedCondition,
@@ -124,10 +125,29 @@ interface ConditionViewerProps {
 }
 
 function ConditionViewer({ condition }: ConditionViewerProps) {
+  const getBackgroundColor = () => {
+    switch (condition.type) {
+      case ConditionType.Output:
+        return 'bg-emerald-100 dark:bg-emerald-950';
+      case ConditionType.Assertion:
+        return 'bg-blue-100 dark:bg-blue-950';
+      case ConditionType.Timelock:
+        return 'bg-indigo-100 dark:bg-indigo-950';
+      case ConditionType.Announcement:
+        return 'bg-purple-100 dark:bg-purple-950';
+      case ConditionType.Message:
+        return 'bg-rose-100 dark:bg-rose-950';
+      case ConditionType.AggSig:
+        return 'bg-cyan-100 dark:bg-cyan-950';
+      default:
+        return 'bg-accent';
+    }
+  };
+
   return (
-    <div className='p-1.5 rounded-md bg-accent text-sm'>
+    <div className={`p-1.5 rounded-md text-sm ${getBackgroundColor()}`}>
       <div className='flex flex-wrap items-center gap-2 mb-1'>
-        <div className='font-medium'>{condition.type}</div>
+        <div className='font-medium'>{condition.name}</div>
         <div className='text-xs text-muted-foreground'>
           ({condition.opcode})
         </div>

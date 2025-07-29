@@ -31,8 +31,19 @@ export interface ParsedCoin {
 
 export interface ParsedCondition {
   opcode: string;
-  type: string;
+  name: string;
+  type: ConditionType;
   args: Record<string, ConditionArg>;
+}
+
+export enum ConditionType {
+  Output,
+  Assertion,
+  Timelock,
+  Announcement,
+  Message,
+  AggSig,
+  Other,
 }
 
 export interface ConditionArg {
@@ -87,12 +98,13 @@ function parseCoin(coin: Coin): ParsedCoin {
 }
 
 function parseCondition(coin: Coin, condition: Program): ParsedCondition {
-  let type = 'UNKNOWN';
+  let name = 'UNKNOWN';
+  let type = ConditionType.Other;
   const args: Record<string, ConditionArg> = {};
 
   const remark = condition.parseRemark();
   if (remark) {
-    type = 'REMARK';
+    name = 'REMARK';
     args.rest = {
       value: remark.rest.unparse(),
       type: ConditionArgType.NonCopiable,
@@ -100,21 +112,21 @@ function parseCondition(coin: Coin, condition: Program): ParsedCondition {
   }
 
   const aggSigParent = condition.parseAggSigParent();
-  if (aggSigParent) type = 'AGG_SIG_PARENT';
+  if (aggSigParent) name = 'AGG_SIG_PARENT';
   const aggSigPuzzle = condition.parseAggSigPuzzle();
-  if (aggSigPuzzle) type = 'AGG_SIG_PUZZLE';
+  if (aggSigPuzzle) name = 'AGG_SIG_PUZZLE';
   const aggSigAmount = condition.parseAggSigAmount();
-  if (aggSigAmount) type = 'AGG_SIG_AMOUNT';
+  if (aggSigAmount) name = 'AGG_SIG_AMOUNT';
   const aggSigPuzzleAmount = condition.parseAggSigPuzzleAmount();
-  if (aggSigPuzzleAmount) type = 'AGG_SIG_PUZZLE_AMOUNT';
+  if (aggSigPuzzleAmount) name = 'AGG_SIG_PUZZLE_AMOUNT';
   const aggSigParentAmount = condition.parseAggSigParentAmount();
-  if (aggSigParentAmount) type = 'AGG_SIG_PARENT_AMOUNT';
+  if (aggSigParentAmount) name = 'AGG_SIG_PARENT_AMOUNT';
   const aggSigParentPuzzle = condition.parseAggSigParentPuzzle();
-  if (aggSigParentPuzzle) type = 'AGG_SIG_PARENT_PUZZLE';
+  if (aggSigParentPuzzle) name = 'AGG_SIG_PARENT_PUZZLE';
   const aggSigUnsafe = condition.parseAggSigUnsafe();
-  if (aggSigUnsafe) type = 'AGG_SIG_UNSAFE';
+  if (aggSigUnsafe) name = 'AGG_SIG_UNSAFE';
   const aggSigMe = condition.parseAggSigMe();
-  if (aggSigMe) type = 'AGG_SIG_ME';
+  if (aggSigMe) name = 'AGG_SIG_ME';
 
   const aggSig =
     aggSigParent ??
@@ -127,6 +139,8 @@ function parseCondition(coin: Coin, condition: Program): ParsedCondition {
     aggSigMe;
 
   if (aggSig) {
+    type = ConditionType.AggSig;
+
     args.public_key = {
       value: `0x${toHex(aggSig.publicKey.toBytes())}`,
       type: ConditionArgType.Copiable,
@@ -139,19 +153,24 @@ function parseCondition(coin: Coin, condition: Program): ParsedCondition {
 
   const createCoin = condition.parseCreateCoin();
   if (createCoin) {
-    type = 'CREATE_COIN';
+    type = ConditionType.Output;
+    name = 'CREATE_COIN';
+
     args.coin_id = {
       value: `0x${toHex(new Coin(coin.coinId(), createCoin.puzzleHash, createCoin.amount).coinId())}`,
       type: ConditionArgType.CoinId,
     };
+
     args.puzzle_hash = {
       value: `0x${toHex(createCoin.puzzleHash)}`,
       type: ConditionArgType.Copiable,
     };
+
     args.amount = {
       value: createCoin.amount.toString(),
       type: ConditionArgType.NonCopiable,
     };
+
     if (createCoin.memos) {
       args.memos = {
         value: createCoin.memos.unparse(),
@@ -162,7 +181,9 @@ function parseCondition(coin: Coin, condition: Program): ParsedCondition {
 
   const reserveFee = condition.parseReserveFee();
   if (reserveFee) {
-    type = 'RESERVE_FEE';
+    type = ConditionType.Output;
+    name = 'RESERVE_FEE';
+
     args.amount = {
       value: reserveFee.amount.toString(),
       type: ConditionArgType.NonCopiable,
@@ -171,11 +192,14 @@ function parseCondition(coin: Coin, condition: Program): ParsedCondition {
 
   const createCoinAnnouncement = condition.parseCreateCoinAnnouncement();
   if (createCoinAnnouncement) {
-    type = 'CREATE_COIN_ANNOUNCEMENT';
+    type = ConditionType.Announcement;
+    name = 'CREATE_COIN_ANNOUNCEMENT';
+
     args.message = {
       value: `0x${toHex(createCoinAnnouncement.message)}`,
       type: ConditionArgType.Copiable,
     };
+
     args.announcement_id = {
       value: `0x${toHex(sha256(new Uint8Array([...coin.coinId(), ...createCoinAnnouncement.message])))}`,
       type: ConditionArgType.Copiable,
@@ -184,7 +208,9 @@ function parseCondition(coin: Coin, condition: Program): ParsedCondition {
 
   const assertCoinAnnouncement = condition.parseAssertCoinAnnouncement();
   if (assertCoinAnnouncement) {
-    type = 'ASSERT_COIN_ANNOUNCEMENT';
+    type = ConditionType.Announcement;
+    name = 'ASSERT_COIN_ANNOUNCEMENT';
+
     args.announcement_id = {
       value: `0x${toHex(assertCoinAnnouncement.announcementId)}`,
       type: ConditionArgType.Copiable,
@@ -193,7 +219,9 @@ function parseCondition(coin: Coin, condition: Program): ParsedCondition {
 
   const createPuzzleAnnouncement = condition.parseCreatePuzzleAnnouncement();
   if (createPuzzleAnnouncement) {
-    type = 'CREATE_PUZZLE_ANNOUNCEMENT';
+    type = ConditionType.Announcement;
+    name = 'CREATE_PUZZLE_ANNOUNCEMENT';
+
     args.message = {
       value: `0x${toHex(createPuzzleAnnouncement.message)}`,
       type: ConditionArgType.Copiable,
@@ -206,7 +234,9 @@ function parseCondition(coin: Coin, condition: Program): ParsedCondition {
 
   const assertPuzzleAnnouncement = condition.parseAssertPuzzleAnnouncement();
   if (assertPuzzleAnnouncement) {
-    type = 'ASSERT_PUZZLE_ANNOUNCEMENT';
+    type = ConditionType.Announcement;
+    name = 'ASSERT_PUZZLE_ANNOUNCEMENT';
+
     args.announcement_id = {
       value: `0x${toHex(assertPuzzleAnnouncement.announcementId)}`,
       type: ConditionArgType.Copiable,
@@ -215,7 +245,9 @@ function parseCondition(coin: Coin, condition: Program): ParsedCondition {
 
   const assertConcurrentSpend = condition.parseAssertConcurrentSpend();
   if (assertConcurrentSpend) {
-    type = 'ASSERT_CONCURRENT_SPEND';
+    type = ConditionType.Assertion;
+    name = 'ASSERT_CONCURRENT_SPEND';
+
     args.coin_id = {
       value: `0x${toHex(assertConcurrentSpend.coinId)}`,
       type: ConditionArgType.CoinId,
@@ -224,7 +256,9 @@ function parseCondition(coin: Coin, condition: Program): ParsedCondition {
 
   const assertConcurrentPuzzle = condition.parseAssertConcurrentPuzzle();
   if (assertConcurrentPuzzle) {
-    type = 'ASSERT_CONCURRENT_PUZZLE';
+    type = ConditionType.Assertion;
+    name = 'ASSERT_CONCURRENT_PUZZLE';
+
     args.puzzle_hash = {
       value: `0x${toHex(assertConcurrentPuzzle.puzzleHash)}`,
       type: ConditionArgType.Copiable,
@@ -233,7 +267,9 @@ function parseCondition(coin: Coin, condition: Program): ParsedCondition {
 
   const sendMessage = condition.parseSendMessage();
   if (sendMessage) {
-    type = 'SEND_MESSAGE';
+    type = ConditionType.Message;
+    name = 'SEND_MESSAGE';
+
     args.mode = {
       value: sendMessage.mode.toString(),
       type: ConditionArgType.NonCopiable,
@@ -252,7 +288,9 @@ function parseCondition(coin: Coin, condition: Program): ParsedCondition {
 
   const receiveMessage = condition.parseReceiveMessage();
   if (receiveMessage) {
-    type = 'RECEIVE_MESSAGE';
+    type = ConditionType.Message;
+    name = 'RECEIVE_MESSAGE';
+
     args.mode = {
       value: receiveMessage.mode.toString(),
       type: ConditionArgType.NonCopiable,
@@ -274,7 +312,9 @@ function parseCondition(coin: Coin, condition: Program): ParsedCondition {
 
   const assertMyCoinId = condition.parseAssertMyCoinId();
   if (assertMyCoinId) {
-    type = 'ASSERT_MY_COIN_ID';
+    type = ConditionType.Assertion;
+    name = 'ASSERT_MY_COIN_ID';
+
     args.coin_id = {
       value: `0x${toHex(assertMyCoinId.coinId)}`,
       type: ConditionArgType.CoinId,
@@ -283,7 +323,9 @@ function parseCondition(coin: Coin, condition: Program): ParsedCondition {
 
   const assertMyParentId = condition.parseAssertMyParentId();
   if (assertMyParentId) {
-    type = 'ASSERT_MY_PARENT_ID';
+    type = ConditionType.Assertion;
+    name = 'ASSERT_MY_PARENT_ID';
+
     args.parent_id = {
       value: `0x${toHex(assertMyParentId.parentId)}`,
       type: ConditionArgType.CoinId,
@@ -292,7 +334,9 @@ function parseCondition(coin: Coin, condition: Program): ParsedCondition {
 
   const assertMyPuzzleHash = condition.parseAssertMyPuzzleHash();
   if (assertMyPuzzleHash) {
-    type = 'ASSERT_MY_PUZZLE_HASH';
+    type = ConditionType.Assertion;
+    name = 'ASSERT_MY_PUZZLE_HASH';
+
     args.puzzle_hash = {
       value: `0x${toHex(assertMyPuzzleHash.puzzleHash)}`,
       type: ConditionArgType.Copiable,
@@ -301,7 +345,9 @@ function parseCondition(coin: Coin, condition: Program): ParsedCondition {
 
   const assertMyAmount = condition.parseAssertMyAmount();
   if (assertMyAmount) {
-    type = 'ASSERT_MY_AMOUNT';
+    type = ConditionType.Assertion;
+    name = 'ASSERT_MY_AMOUNT';
+
     args.amount = {
       value: assertMyAmount.amount.toString(),
       type: ConditionArgType.NonCopiable,
@@ -310,7 +356,9 @@ function parseCondition(coin: Coin, condition: Program): ParsedCondition {
 
   const assertMyBirthSeconds = condition.parseAssertMyBirthSeconds();
   if (assertMyBirthSeconds) {
-    type = 'ASSERT_MY_BIRTH_SECONDS';
+    type = ConditionType.Assertion;
+    name = 'ASSERT_MY_BIRTH_SECONDS';
+
     args.seconds = {
       value: assertMyBirthSeconds.seconds.toString(),
       type: ConditionArgType.NonCopiable,
@@ -319,7 +367,9 @@ function parseCondition(coin: Coin, condition: Program): ParsedCondition {
 
   const assertMyBirthHeight = condition.parseAssertMyBirthHeight();
   if (assertMyBirthHeight) {
-    type = 'ASSERT_MY_BIRTH_HEIGHT';
+    type = ConditionType.Assertion;
+    name = 'ASSERT_MY_BIRTH_HEIGHT';
+
     args.height = {
       value: assertMyBirthHeight.height.toString(),
       type: ConditionArgType.NonCopiable,
@@ -328,12 +378,15 @@ function parseCondition(coin: Coin, condition: Program): ParsedCondition {
 
   const assertEphemeral = condition.parseAssertEphemeral();
   if (assertEphemeral) {
-    type = 'ASSERT_EPHEMERAL';
+    type = ConditionType.Assertion;
+    name = 'ASSERT_EPHEMERAL';
   }
 
   const assertSecondsRelative = condition.parseAssertSecondsRelative();
   if (assertSecondsRelative) {
-    type = 'ASSERT_SECONDS_RELATIVE';
+    type = ConditionType.Timelock;
+    name = 'ASSERT_SECONDS_RELATIVE';
+
     args.seconds = {
       value: assertSecondsRelative.seconds.toString(),
       type: ConditionArgType.NonCopiable,
@@ -342,7 +395,9 @@ function parseCondition(coin: Coin, condition: Program): ParsedCondition {
 
   const assertHeightRelative = condition.parseAssertHeightRelative();
   if (assertHeightRelative) {
-    type = 'ASSERT_HEIGHT_RELATIVE';
+    type = ConditionType.Timelock;
+    name = 'ASSERT_HEIGHT_RELATIVE';
+
     args.height = {
       value: assertHeightRelative.height.toString(),
       type: ConditionArgType.NonCopiable,
@@ -351,7 +406,9 @@ function parseCondition(coin: Coin, condition: Program): ParsedCondition {
 
   const assertSecondsAbsolute = condition.parseAssertSecondsAbsolute();
   if (assertSecondsAbsolute) {
-    type = 'ASSERT_SECONDS_ABSOLUTE';
+    type = ConditionType.Timelock;
+    name = 'ASSERT_SECONDS_ABSOLUTE';
+
     args.seconds = {
       value: assertSecondsAbsolute.seconds.toString(),
       type: ConditionArgType.NonCopiable,
@@ -360,7 +417,9 @@ function parseCondition(coin: Coin, condition: Program): ParsedCondition {
 
   const assertHeightAbsolute = condition.parseAssertHeightAbsolute();
   if (assertHeightAbsolute) {
-    type = 'ASSERT_HEIGHT_ABSOLUTE';
+    type = ConditionType.Timelock;
+    name = 'ASSERT_HEIGHT_ABSOLUTE';
+
     args.height = {
       value: assertHeightAbsolute.height.toString(),
       type: ConditionArgType.NonCopiable,
@@ -370,7 +429,9 @@ function parseCondition(coin: Coin, condition: Program): ParsedCondition {
   const assertBeforeSecondsRelative =
     condition.parseAssertBeforeSecondsRelative();
   if (assertBeforeSecondsRelative) {
-    type = 'ASSERT_BEFORE_SECONDS_RELATIVE';
+    type = ConditionType.Timelock;
+    name = 'ASSERT_BEFORE_SECONDS_RELATIVE';
+
     args.seconds = {
       value: assertBeforeSecondsRelative.seconds.toString(),
       type: ConditionArgType.NonCopiable,
@@ -380,7 +441,9 @@ function parseCondition(coin: Coin, condition: Program): ParsedCondition {
   const assertBeforeHeightRelative =
     condition.parseAssertBeforeHeightRelative();
   if (assertBeforeHeightRelative) {
-    type = 'ASSERT_BEFORE_HEIGHT_RELATIVE';
+    type = ConditionType.Timelock;
+    name = 'ASSERT_BEFORE_HEIGHT_RELATIVE';
+
     args.height = {
       value: assertBeforeHeightRelative.height.toString(),
       type: ConditionArgType.NonCopiable,
@@ -390,7 +453,9 @@ function parseCondition(coin: Coin, condition: Program): ParsedCondition {
   const assertBeforeSecondsAbsolute =
     condition.parseAssertBeforeSecondsAbsolute();
   if (assertBeforeSecondsAbsolute) {
-    type = 'ASSERT_BEFORE_SECONDS_ABSOLUTE';
+    type = ConditionType.Timelock;
+    name = 'ASSERT_BEFORE_SECONDS_ABSOLUTE';
+
     args.seconds = {
       value: assertBeforeSecondsAbsolute.seconds.toString(),
       type: ConditionArgType.NonCopiable,
@@ -400,7 +465,9 @@ function parseCondition(coin: Coin, condition: Program): ParsedCondition {
   const assertBeforeHeightAbsolute =
     condition.parseAssertBeforeHeightAbsolute();
   if (assertBeforeHeightAbsolute) {
-    type = 'ASSERT_BEFORE_HEIGHT_ABSOLUTE';
+    type = ConditionType.Timelock;
+    name = 'ASSERT_BEFORE_HEIGHT_ABSOLUTE';
+
     args.height = {
       value: assertBeforeHeightAbsolute.height.toString(),
       type: ConditionArgType.NonCopiable,
@@ -409,18 +476,25 @@ function parseCondition(coin: Coin, condition: Program): ParsedCondition {
 
   const softfork = condition.parseSoftfork();
   if (softfork) {
-    type = 'SOFTFORK';
+    name = 'SOFTFORK';
+
     args.cost = {
       value: softfork.cost.toString(),
       type: ConditionArgType.NonCopiable,
     };
+
     args.rest = {
       value: softfork.rest.unparse(),
       type: ConditionArgType.NonCopiable,
     };
   }
 
-  return { opcode: condition.first().toInt()?.toString() ?? '', type, args };
+  return {
+    opcode: condition.first().toInt()?.toString() ?? '',
+    name,
+    type,
+    args,
+  };
 }
 
 enum MessageSide {
