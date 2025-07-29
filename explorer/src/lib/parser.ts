@@ -62,6 +62,7 @@ export enum ConditionArgType {
 }
 
 interface BundleContext {
+  selfContained: boolean;
   announcementCoinIds: Record<string, Uint8Array>;
   announcementPuzzleHashes: Record<string, Uint8Array>;
   announcementMessages: Record<string, Uint8Array>;
@@ -80,11 +81,15 @@ interface DeserializedCoinSpend {
   conditions: Program[];
 }
 
-export function parseSpendBundle(spendBundle: SpendBundle): ParsedSpendBundle {
+export function parseSpendBundle(
+  spendBundle: SpendBundle,
+  selfContained: boolean,
+): ParsedSpendBundle {
   const clvm = new Clvm();
 
   const deserializedCoinSpends: DeserializedCoinSpend[] = [];
   const announcements: BundleContext = {
+    selfContained,
     announcementCoinIds: {},
     announcementPuzzleHashes: {},
     announcementMessages: {},
@@ -321,7 +326,10 @@ function parseCondition(
       type: ConditionArgType.Copiable,
     };
 
-    if (!ctx.coinAnnouncementAssertions.has(announcementId)) {
+    if (
+      !ctx.coinAnnouncementAssertions.has(announcementId) &&
+      ctx.selfContained
+    ) {
       warning = 'Not asserted';
     }
   }
@@ -345,7 +353,7 @@ function parseCondition(
         value: `0x${toHex(ctx.announcementCoinIds[announcementId])}`,
         type: ConditionArgType.CoinId,
       };
-    } else {
+    } else if (ctx.selfContained) {
       warning = 'Announcement does not exist';
     }
 
@@ -384,7 +392,10 @@ function parseCondition(
       type: ConditionArgType.Copiable,
     };
 
-    if (!ctx.puzzleAnnouncementAssertions.has(announcementId)) {
+    if (
+      !ctx.puzzleAnnouncementAssertions.has(announcementId) &&
+      ctx.selfContained
+    ) {
       warning = 'Not asserted';
     }
   }
@@ -408,7 +419,7 @@ function parseCondition(
         value: `0x${toHex(ctx.announcementPuzzleHashes[announcementId])}`,
         type: ConditionArgType.Copiable,
       };
-    } else {
+    } else if (ctx.selfContained) {
       warning = 'Announcement does not exist';
     }
 
@@ -428,7 +439,10 @@ function parseCondition(
       type: ConditionArgType.CoinId,
     };
 
-    if (!ctx.spentCoinIds.has(toHex(assertConcurrentSpend.coinId))) {
+    if (
+      !ctx.spentCoinIds.has(toHex(assertConcurrentSpend.coinId)) &&
+      ctx.selfContained
+    ) {
       warning = 'Coin not spent';
     }
   }
@@ -443,7 +457,10 @@ function parseCondition(
       type: ConditionArgType.Copiable,
     };
 
-    if (!ctx.spentPuzzleHashes.has(toHex(assertConcurrentPuzzle.puzzleHash))) {
+    if (
+      !ctx.spentPuzzleHashes.has(toHex(assertConcurrentPuzzle.puzzleHash)) &&
+      ctx.selfContained
+    ) {
       warning = 'Puzzle not spent';
     }
   }
@@ -576,7 +593,7 @@ function parseCondition(
     type = ConditionType.Assertion;
     name = 'ASSERT_EPHEMERAL';
 
-    if (!ctx.createdCoinIds.has(toHex(coin.coinId()))) {
+    if (!ctx.createdCoinIds.has(toHex(coin.coinId())) && ctx.selfContained) {
       warning = 'Coin not created ephemerally in this bundle';
     }
   }

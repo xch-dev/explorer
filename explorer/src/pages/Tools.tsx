@@ -24,11 +24,11 @@ import { useLocalStorage } from 'usehooks-ts';
 export function Tools() {
   const [value, setValue] = useLocalStorage('tools-bundle', '');
 
-  const spendBundle = useMemo(() => {
+  const parsedSpendBundle = useMemo(() => {
     if (!value) return null;
 
     try {
-      return decodeOffer(value);
+      return parseSpendBundle(decodeOffer(value), true);
     } catch {
       // Not a valid offer
     }
@@ -37,9 +37,12 @@ export function Tools() {
       const result = parseJson(JSON.parse(value));
 
       if (result instanceof SpendBundle) {
-        return result;
+        return parseSpendBundle(result, true);
       } else if (result instanceof CoinSpend) {
-        return new SpendBundle([result], Signature.infinity());
+        return parseSpendBundle(
+          new SpendBundle([result], Signature.infinity()),
+          false,
+        );
       } else if (result instanceof Coin) {
         return null;
       }
@@ -49,12 +52,6 @@ export function Tools() {
 
     return null;
   }, [value]);
-
-  const parsedSpendBundle = useMemo(() => {
-    if (!spendBundle) return null;
-
-    return parseSpendBundle(spendBundle);
-  }, [spendBundle]);
 
   return (
     <Layout>
