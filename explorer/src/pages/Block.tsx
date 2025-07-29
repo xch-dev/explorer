@@ -122,7 +122,7 @@ export function Block() {
                 </div>
               </div>
 
-              <div className='grid gap-3 sm:grid-cols-2 lg:grid-cols-3'>
+              <div className='space-y-3 max-h-[600px] pr-2'>
                 {coins.map((coin) => (
                   <CoinCard
                     key={coin.coin_id}
@@ -193,52 +193,67 @@ function CoinCard({ coinRecord, block }: CoinCardProps) {
 
   return (
     <div
-      className={`
-      bg-card border rounded-lg overflow-hidden
-      ${
-        isCreated && isSpent
-          ? 'border-yellow-500/30'
-          : isCreated
-            ? 'border-green-500/30'
-            : isSpent
-              ? 'border-red-500/30'
-              : 'border-border'
-      }`}
+      className={`bg-card border rounded-lg hover:bg-accent/50 transition-colors`}
     >
-      <div className='p-3'>
-        <div className='flex items-center gap-2 mb-1.5'>
-          <div className='font-mono text-xs text-muted-foreground'>
-            {truncateHash(coinRecord.coin_id)}
+      <div className='p-4'>
+        <div className='flex items-center gap-2 mb-3'>
+          {token?.icon && (
+            <img
+              src={token.icon}
+              alt={token.name}
+              className='w-6 h-6 rounded-full'
+            />
+          )}
+          <div className='font-medium text-lg'>
+            {toDecimal(
+              coinRecord.coin.amount,
+              coinRecord.type === 'cat' ? 3 : 12,
+            )}{' '}
+            <span className='text-muted-foreground'>
+              {token?.code || (coinRecord.type === 'cat' ? 'CAT' : 'XCH')}
+            </span>
           </div>
-          <div className='flex gap-1 ml-auto'>
+          <div className='flex gap-1.5 ml-auto'>
             {isCreated && (
-              <div className='px-1.5 py-0.5 bg-green-500/10 text-green-500 rounded-full text-[10px] font-medium'>
+              <div className='px-2 py-1 bg-green-500/10 text-green-500 rounded-full text-xs font-medium'>
                 Created
               </div>
             )}
             {isSpent && (
-              <div className='px-1.5 py-0.5 bg-red-500/10 text-red-500 rounded-full text-[10px] font-medium'>
+              <div className='px-2 py-1 bg-red-500/10 text-red-500 rounded-full text-xs font-medium'>
                 Spent
               </div>
             )}
           </div>
         </div>
-        <div className='flex items-center gap-2'>
-          {token?.icon && (
-            <img
-              src={token.icon}
-              alt={token.name}
-              className='w-5 h-5 rounded-full'
-            />
+
+        <div className='space-y-2 text-sm'>
+          <div>
+            <div className='text-muted-foreground'>Coin ID</div>
+            <div className='font-mono'>{truncateHash(coinRecord.coin_id)}</div>
+          </div>
+          <div>
+            <div className='text-muted-foreground'>Puzzle Hash</div>
+            <div className='font-mono'>
+              {truncateHash(coinRecord.coin.puzzle_hash)}
+            </div>
+          </div>
+          {coinRecord.type === 'cat' && (
+            <div>
+              <div className='text-muted-foreground'>Asset ID</div>
+              <div className='font-mono'>
+                {truncateHash(coinRecord.asset_id)}
+              </div>
+            </div>
           )}
-          <div className='font-medium'>
-            {toDecimal(
-              coinRecord.coin.amount,
-              coinRecord.type === 'cat' ? 3 : 12,
-            )}{' '}
-            <span className='text-sm font-normal text-muted-foreground'>
-              {token?.code || (coinRecord.type === 'cat' ? 'CAT' : 'XCH')}
-            </span>
+          <div className='text-muted-foreground text-xs'>
+            {isCreated
+              ? `Created at height ${coinRecord.created_height.toLocaleString()}`
+              : ''}
+            {isCreated && isSpent ? ' • ' : ''}
+            {isSpent
+              ? `Spent at height ${coinRecord.spent_height?.toLocaleString()}`
+              : ''}
           </div>
         </div>
       </div>

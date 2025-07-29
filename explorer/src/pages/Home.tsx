@@ -6,6 +6,7 @@ import {
   TooltipTrigger,
 } from '@/components/ui/tooltip';
 import { BlockRecord, getBlocks } from '@/lib/api';
+import { MAX_BLOCK_COST } from '@/lib/constants';
 import { truncateHash } from '@/lib/conversions';
 import { intlFormat, intlFormatDistance } from 'date-fns';
 import { CoinsIcon, HashIcon, LayersIcon } from 'lucide-react';
@@ -86,7 +87,7 @@ function Block({ block }: BlockProps) {
             <>
               <Tooltip>
                 <TooltipTrigger asChild>
-                  <div className='text-sm text-muted-foreground'>
+                  <div className='text-sm'>
                     {intlFormatDistance(timestamp, new Date())}
                   </div>
                 </TooltipTrigger>
@@ -102,18 +103,26 @@ function Block({ block }: BlockProps) {
                   <span className='text-green-600'>
                     +{block.transaction_info.additions}
                   </span>
-                  {' / '}
+                  <span className='text-muted-foreground'> / </span>
                   <span className='text-red-500'>
                     -{block.transaction_info.removals}
                   </span>
-                  {' coins'}
+                  <span className='text-muted-foreground'>
+                    {' '}
+                    coins (
+                    {(
+                      block.transaction_info.cost / MAX_BLOCK_COST
+                    ).toLocaleString(undefined, {
+                      style: 'percent',
+                      maximumFractionDigits: 2,
+                    })}{' '}
+                    full)
+                  </span>
                 </div>
               )}
             </>
           ) : (
-            <div className='text-sm text-muted-foreground'>
-              Non-transaction block
-            </div>
+            <div className='text-sm'>Non-transaction block</div>
           )}
         </div>
       </div>

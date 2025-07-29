@@ -26,7 +26,7 @@ export interface BlockRecord {
 export interface TransactionInfo {
   timestamp: number;
   fees: number | bigint;
-  cost: number | bigint;
+  cost: number;
   additions: number;
   removals: number;
   prev_transaction_block_hash: string;
