@@ -106,6 +106,11 @@ export async function getBlock(hash: string) {
   return response.block;
 }
 
+export async function getBlockByHeight(height: number) {
+  const response = await get<BlockResponse>(`/blocks/height/${height}`);
+  return response.block;
+}
+
 export async function getCoins(headerHash: string) {
   const response = await get<CoinsResponse>(`/coins/block/${headerHash}`);
   return response.coins;

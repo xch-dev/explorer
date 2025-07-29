@@ -208,9 +208,9 @@ function CoinCard({ coinRecord, block }: CoinCardProps) {
   return (
     <Link
       to={`/coin/${coinRecord.coin_id}`}
-      className='block bg-card border rounded-lg hover:bg-accent/50 transition-colors overflow-hidden'
+      className='block bg-card border rounded-lg hover:bg-accent/75 transition-colors overflow-hidden'
     >
-      <div className='p-3'>
+      <div className='p-1.5'>
         <div className='flex flex-wrap items-center gap-2'>
           <div className='flex items-center gap-2 min-w-0 flex-1'>
             {token?.icon ? (

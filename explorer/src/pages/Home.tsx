@@ -61,7 +61,7 @@ function Block({ block }: BlockProps) {
   return (
     <Link
       to={`/block/${block.header_hash}`}
-      className='p-4 bg-card border rounded-lg hover:border-primary/50 transition-colors'
+      className='p-4 bg-card border rounded-lg hover:bg-accent/75 transition-colors'
     >
       <div className='flex items-start justify-between'>
         <div className='space-y-2'>
