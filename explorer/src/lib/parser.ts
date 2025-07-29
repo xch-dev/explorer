@@ -1,8 +1,11 @@
 import {
+  bytesEqual,
   Clvm,
   Coin,
   CoinSpend,
+  Output,
   Program,
+  Puzzle,
   sha256,
   SpendBundle,
   toHex,
@@ -34,6 +37,7 @@ export interface ParsedCondition {
   name: string;
   type: ConditionType;
   args: Record<string, ConditionArg>;
+  warning: string | null;
 }
 
 export enum ConditionType {
@@ -55,35 +59,130 @@ export enum ConditionArgType {
   CoinId,
   Copiable,
   NonCopiable,
-  Invalid,
+}
+
+interface BundleContext {
+  announcementCoinIds: Record<string, Uint8Array>;
+  announcementPuzzleHashes: Record<string, Uint8Array>;
+  announcementMessages: Record<string, Uint8Array>;
+  coinAnnouncementAssertions: Set<string>;
+  puzzleAnnouncementAssertions: Set<string>;
+  spentCoinIds: Set<string>;
+  spentPuzzleHashes: Set<string>;
+  createdCoinIds: Set<string>;
+}
+
+interface DeserializedCoinSpend {
+  coinSpend: CoinSpend;
+  puzzle: Puzzle;
+  solution: Program;
+  output: Output;
+  conditions: Program[];
 }
 
 export function parseSpendBundle(spendBundle: SpendBundle): ParsedSpendBundle {
   const clvm = new Clvm();
 
+  const deserializedCoinSpends: DeserializedCoinSpend[] = [];
+  const announcements: BundleContext = {
+    announcementCoinIds: {},
+    announcementPuzzleHashes: {},
+    announcementMessages: {},
+    coinAnnouncementAssertions: new Set(),
+    puzzleAnnouncementAssertions: new Set(),
+    spentCoinIds: new Set(),
+    spentPuzzleHashes: new Set(),
+    createdCoinIds: new Set(),
+  };
+
+  for (const coinSpend of spendBundle.coinSpends) {
+    const puzzle = clvm.deserialize(coinSpend.puzzleReveal).puzzle();
+    const solution = clvm.deserialize(coinSpend.solution);
+
+    const output = puzzle.program.run(solution, 11_000_000_000n, false);
+    const conditions = output.value.toList() ?? [];
+
+    const coinId = coinSpend.coin.coinId();
+    const puzzleHash = coinSpend.coin.puzzleHash;
+
+    announcements.spentCoinIds.add(toHex(coinId));
+    announcements.spentPuzzleHashes.add(toHex(puzzleHash));
+
+    for (const condition of conditions) {
+      const createCoinAnnouncement = condition.parseCreateCoinAnnouncement();
+      if (createCoinAnnouncement) {
+        const message = createCoinAnnouncement.message;
+        const announcementId = sha256(new Uint8Array([...coinId, ...message]));
+        announcements.announcementCoinIds[toHex(announcementId)] = coinId;
+        announcements.announcementMessages[toHex(announcementId)] = message;
+      }
+
+      const createPuzzleAnnouncement =
+        condition.parseCreatePuzzleAnnouncement();
+      if (createPuzzleAnnouncement) {
+        const message = createPuzzleAnnouncement.message;
+        const announcementId = sha256(
+          new Uint8Array([...puzzleHash, ...message]),
+        );
+        announcements.announcementPuzzleHashes[toHex(announcementId)] =
+          puzzleHash;
+        announcements.announcementMessages[toHex(announcementId)] = message;
+      }
+
+      const assertCoinAnnouncement = condition.parseAssertCoinAnnouncement();
+      if (assertCoinAnnouncement) {
+        announcements.coinAnnouncementAssertions.add(
+          toHex(assertCoinAnnouncement.announcementId),
+        );
+      }
+
+      const assertPuzzleAnnouncement =
+        condition.parseAssertPuzzleAnnouncement();
+      if (assertPuzzleAnnouncement) {
+        announcements.puzzleAnnouncementAssertions.add(
+          toHex(assertPuzzleAnnouncement.announcementId),
+        );
+      }
+
+      const createCoin = condition.parseCreateCoin();
+      if (createCoin) {
+        announcements.createdCoinIds.add(
+          toHex(
+            new Coin(coinId, createCoin.puzzleHash, createCoin.amount).coinId(),
+          ),
+        );
+      }
+    }
+
+    deserializedCoinSpends.push({
+      coinSpend,
+      puzzle,
+      solution,
+      output,
+      conditions,
+    });
+  }
+
   return {
-    coinSpends: spendBundle.coinSpends.map((coinSpend) =>
-      parseCoinSpend(clvm, coinSpend),
+    coinSpends: deserializedCoinSpends.map((coinSpend) =>
+      parseCoinSpend(coinSpend, announcements),
     ),
     aggregatedSignature: `0x${toHex(spendBundle.aggregatedSignature.toBytes())}`,
     fee: '0',
   };
 }
 
-function parseCoinSpend(clvm: Clvm, coinSpend: CoinSpend): ParsedCoinSpend {
-  const puzzle = clvm.deserialize(coinSpend.puzzleReveal).puzzle();
-  const solution = clvm.deserialize(coinSpend.solution);
-
-  const output = puzzle.program.run(solution, 11_000_000_000n, false);
-  const conditions = output.value.toList() ?? [];
-
+function parseCoinSpend(
+  { coinSpend, output, conditions }: DeserializedCoinSpend,
+  ctx: BundleContext,
+): ParsedCoinSpend {
   return {
     coin: parseCoin(coinSpend.coin),
     puzzleReveal: toHex(coinSpend.puzzleReveal),
     solution: toHex(coinSpend.solution),
     runtimeCost: output.cost.toString(),
     conditions: conditions.map((condition) =>
-      parseCondition(coinSpend.coin, condition),
+      parseCondition(coinSpend.coin, condition, ctx),
     ),
   };
 }
@@ -97,9 +196,15 @@ function parseCoin(coin: Coin): ParsedCoin {
   };
 }
 
-function parseCondition(coin: Coin, condition: Program): ParsedCondition {
+function parseCondition(
+  coin: Coin,
+  condition: Program,
+  ctx: BundleContext,
+): ParsedCondition {
   let name = 'UNKNOWN';
   let type = ConditionType.Other;
+  let warning: string | null = null;
+
   const args: Record<string, ConditionArg> = {};
 
   const remark = condition.parseRemark();
@@ -200,10 +305,25 @@ function parseCondition(coin: Coin, condition: Program): ParsedCondition {
       type: ConditionArgType.Copiable,
     };
 
+    args.coin_id = {
+      value: `0x${toHex(coin.coinId())}`,
+      type: ConditionArgType.CoinId,
+    };
+
+    const announcementId = toHex(
+      sha256(
+        new Uint8Array([...coin.coinId(), ...createCoinAnnouncement.message]),
+      ),
+    );
+
     args.announcement_id = {
-      value: `0x${toHex(sha256(new Uint8Array([...coin.coinId(), ...createCoinAnnouncement.message])))}`,
+      value: `0x${announcementId}`,
       type: ConditionArgType.Copiable,
     };
+
+    if (!ctx.coinAnnouncementAssertions.has(announcementId)) {
+      warning = 'Not asserted';
+    }
   }
 
   const assertCoinAnnouncement = condition.parseAssertCoinAnnouncement();
@@ -211,8 +331,26 @@ function parseCondition(coin: Coin, condition: Program): ParsedCondition {
     type = ConditionType.Announcement;
     name = 'ASSERT_COIN_ANNOUNCEMENT';
 
+    const announcementId = toHex(assertCoinAnnouncement.announcementId);
+
+    if (ctx.announcementMessages[announcementId]) {
+      args.message = {
+        value: `0x${toHex(ctx.announcementMessages[announcementId])}`,
+        type: ConditionArgType.Copiable,
+      };
+    }
+
+    if (ctx.announcementCoinIds[announcementId]) {
+      args.coin_id = {
+        value: `0x${toHex(ctx.announcementCoinIds[announcementId])}`,
+        type: ConditionArgType.CoinId,
+      };
+    } else {
+      warning = 'Announcement does not exist';
+    }
+
     args.announcement_id = {
-      value: `0x${toHex(assertCoinAnnouncement.announcementId)}`,
+      value: `0x${announcementId}`,
       type: ConditionArgType.Copiable,
     };
   }
@@ -226,10 +364,29 @@ function parseCondition(coin: Coin, condition: Program): ParsedCondition {
       value: `0x${toHex(createPuzzleAnnouncement.message)}`,
       type: ConditionArgType.Copiable,
     };
-    args.announcement_id = {
-      value: `0x${toHex(sha256(new Uint8Array([...coin.puzzleHash, ...createPuzzleAnnouncement.message])))}`,
+
+    args.puzzle_hash = {
+      value: `0x${toHex(coin.puzzleHash)}`,
       type: ConditionArgType.Copiable,
     };
+
+    const announcementId = toHex(
+      sha256(
+        new Uint8Array([
+          ...coin.puzzleHash,
+          ...createPuzzleAnnouncement.message,
+        ]),
+      ),
+    );
+
+    args.announcement_id = {
+      value: `0x${announcementId}`,
+      type: ConditionArgType.Copiable,
+    };
+
+    if (!ctx.puzzleAnnouncementAssertions.has(announcementId)) {
+      warning = 'Not asserted';
+    }
   }
 
   const assertPuzzleAnnouncement = condition.parseAssertPuzzleAnnouncement();
@@ -237,8 +394,26 @@ function parseCondition(coin: Coin, condition: Program): ParsedCondition {
     type = ConditionType.Announcement;
     name = 'ASSERT_PUZZLE_ANNOUNCEMENT';
 
+    const announcementId = toHex(assertPuzzleAnnouncement.announcementId);
+
+    if (ctx.announcementMessages[announcementId]) {
+      args.message = {
+        value: `0x${toHex(ctx.announcementMessages[announcementId])}`,
+        type: ConditionArgType.Copiable,
+      };
+    }
+
+    if (ctx.announcementPuzzleHashes[announcementId]) {
+      args.puzzle_hash = {
+        value: `0x${toHex(ctx.announcementPuzzleHashes[announcementId])}`,
+        type: ConditionArgType.Copiable,
+      };
+    } else {
+      warning = 'Announcement does not exist';
+    }
+
     args.announcement_id = {
-      value: `0x${toHex(assertPuzzleAnnouncement.announcementId)}`,
+      value: `0x${announcementId}`,
       type: ConditionArgType.Copiable,
     };
   }
@@ -252,6 +427,10 @@ function parseCondition(coin: Coin, condition: Program): ParsedCondition {
       value: `0x${toHex(assertConcurrentSpend.coinId)}`,
       type: ConditionArgType.CoinId,
     };
+
+    if (!ctx.spentCoinIds.has(toHex(assertConcurrentSpend.coinId))) {
+      warning = 'Coin not spent';
+    }
   }
 
   const assertConcurrentPuzzle = condition.parseAssertConcurrentPuzzle();
@@ -263,6 +442,10 @@ function parseCondition(coin: Coin, condition: Program): ParsedCondition {
       value: `0x${toHex(assertConcurrentPuzzle.puzzleHash)}`,
       type: ConditionArgType.Copiable,
     };
+
+    if (!ctx.spentPuzzleHashes.has(toHex(assertConcurrentPuzzle.puzzleHash))) {
+      warning = 'Puzzle not spent';
+    }
   }
 
   const sendMessage = condition.parseSendMessage();
@@ -330,6 +513,10 @@ function parseCondition(coin: Coin, condition: Program): ParsedCondition {
       value: `0x${toHex(assertMyParentId.parentId)}`,
       type: ConditionArgType.CoinId,
     };
+
+    if (!bytesEqual(coin.parentCoinInfo, assertMyParentId.parentId)) {
+      warning = 'Parent ID does not match';
+    }
   }
 
   const assertMyPuzzleHash = condition.parseAssertMyPuzzleHash();
@@ -341,6 +528,10 @@ function parseCondition(coin: Coin, condition: Program): ParsedCondition {
       value: `0x${toHex(assertMyPuzzleHash.puzzleHash)}`,
       type: ConditionArgType.Copiable,
     };
+
+    if (!bytesEqual(coin.puzzleHash, assertMyPuzzleHash.puzzleHash)) {
+      warning = 'Puzzle hash does not match';
+    }
   }
 
   const assertMyAmount = condition.parseAssertMyAmount();
@@ -352,6 +543,10 @@ function parseCondition(coin: Coin, condition: Program): ParsedCondition {
       value: assertMyAmount.amount.toString(),
       type: ConditionArgType.NonCopiable,
     };
+
+    if (coin.amount !== assertMyAmount.amount) {
+      warning = 'Amount does not match';
+    }
   }
 
   const assertMyBirthSeconds = condition.parseAssertMyBirthSeconds();
@@ -380,6 +575,10 @@ function parseCondition(coin: Coin, condition: Program): ParsedCondition {
   if (assertEphemeral) {
     type = ConditionType.Assertion;
     name = 'ASSERT_EPHEMERAL';
+
+    if (!ctx.createdCoinIds.has(toHex(coin.coinId()))) {
+      warning = 'Coin not created ephemerally in this bundle';
+    }
   }
 
   const assertSecondsRelative = condition.parseAssertSecondsRelative();
@@ -494,6 +693,7 @@ function parseCondition(coin: Coin, condition: Program): ParsedCondition {
     name,
     type,
     args,
+    warning,
   };
 }
 
@@ -550,7 +750,7 @@ function insertMessageModeData(
           }
         : {
             value: 'Missing',
-            type: ConditionArgType.Invalid,
+            type: ConditionArgType.NonCopiable,
           };
     } else {
       if (flags.parent && flags.puzzle) {
@@ -563,7 +763,7 @@ function insertMessageModeData(
             }
           : {
               value: 'Missing',
-              type: ConditionArgType.Invalid,
+              type: ConditionArgType.NonCopiable,
             };
         args[`${prefix}_puzzle_hash`] = puzzleHash
           ? {
@@ -572,7 +772,7 @@ function insertMessageModeData(
             }
           : {
               value: 'Missing',
-              type: ConditionArgType.Invalid,
+              type: ConditionArgType.NonCopiable,
             };
       } else if (flags.parent && flags.amount) {
         const parentCoinId = data[0]?.toAtom();
@@ -584,7 +784,7 @@ function insertMessageModeData(
             }
           : {
               value: 'Missing',
-              type: ConditionArgType.Invalid,
+              type: ConditionArgType.NonCopiable,
             };
         args[`${prefix}_amount`] = amount
           ? {
@@ -593,7 +793,7 @@ function insertMessageModeData(
             }
           : {
               value: 'Missing',
-              type: ConditionArgType.Invalid,
+              type: ConditionArgType.NonCopiable,
             };
       } else if (flags.puzzle && flags.amount) {
         const puzzleHash = data[0]?.toAtom();
@@ -605,7 +805,7 @@ function insertMessageModeData(
             }
           : {
               value: 'Missing',
-              type: ConditionArgType.Invalid,
+              type: ConditionArgType.NonCopiable,
             };
         args[`${prefix}_amount`] = amount
           ? {
@@ -614,7 +814,7 @@ function insertMessageModeData(
             }
           : {
               value: 'Missing',
-              type: ConditionArgType.Invalid,
+              type: ConditionArgType.NonCopiable,
             };
       } else if (flags.parent) {
         const parentCoinId = data[0]?.toAtom();
@@ -625,7 +825,7 @@ function insertMessageModeData(
             }
           : {
               value: 'Missing',
-              type: ConditionArgType.Invalid,
+              type: ConditionArgType.NonCopiable,
             };
       } else if (flags.puzzle) {
         const puzzleHash = data[0]?.toAtom();
@@ -636,7 +836,7 @@ function insertMessageModeData(
             }
           : {
               value: 'Missing',
-              type: ConditionArgType.Invalid,
+              type: ConditionArgType.NonCopiable,
             };
       } else if (flags.amount) {
         const amount = data[0]?.toInt();
@@ -647,7 +847,7 @@ function insertMessageModeData(
             }
           : {
               value: 'Missing',
-              type: ConditionArgType.Invalid,
+              type: ConditionArgType.NonCopiable,
             };
       }
     }

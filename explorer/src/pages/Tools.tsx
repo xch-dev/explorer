@@ -17,6 +17,7 @@ import {
   Signature,
   SpendBundle,
 } from 'chia-wallet-sdk-wasm';
+import { TriangleAlertIcon } from 'lucide-react';
 import { useMemo } from 'react';
 import { useLocalStorage } from 'usehooks-ts';
 
@@ -178,6 +179,11 @@ function ConditionViewer({ condition }: ConditionViewerProps) {
           ({condition.opcode})
         </div>
       </div>
+      {condition.warning !== null && (
+        <div className='text-sm text-yellow-500 mb-1 flex items-center gap-1'>
+          <TriangleAlertIcon className='w-4 h-4' /> {condition.warning}
+        </div>
+      )}
       <div className='space-y-1 text-xs'>
         {Object.entries(condition.args).map(([key, value]) => (
           <div
