@@ -149,27 +149,29 @@ interface ConditionViewerProps {
 }
 
 function ConditionViewer({ condition }: ConditionViewerProps) {
-  const getBackgroundColor = () => {
+  const getBorderColor = () => {
     switch (condition.type) {
       case ConditionType.Output:
-        return 'bg-emerald-100 dark:bg-emerald-950';
+        return 'border-l-emerald-500';
       case ConditionType.Assertion:
-        return 'bg-blue-100 dark:bg-blue-950';
+        return 'border-l-blue-500';
       case ConditionType.Timelock:
-        return 'bg-indigo-100 dark:bg-indigo-950';
+        return 'border-l-indigo-500';
       case ConditionType.Announcement:
-        return 'bg-purple-100 dark:bg-purple-950';
+        return 'border-l-purple-500';
       case ConditionType.Message:
-        return 'bg-rose-100 dark:bg-rose-950';
+        return 'border-l-rose-500';
       case ConditionType.AggSig:
-        return 'bg-cyan-100 dark:bg-cyan-950';
+        return 'border-l-cyan-500';
       default:
-        return 'bg-accent';
+        return 'border-l-gray-500';
     }
   };
 
   return (
-    <div className={`p-1.5 rounded-md text-sm ${getBackgroundColor()}`}>
+    <div
+      className={`p-1.5 rounded-md text-sm border-l-4 ${getBorderColor()} bg-accent`}
+    >
       <div className='flex flex-wrap items-center gap-2 mb-1'>
         <div className='font-medium'>{condition.name}</div>
         <div className='text-xs text-muted-foreground'>
