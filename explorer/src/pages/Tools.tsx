@@ -126,7 +126,7 @@ interface ConditionViewerProps {
 function ConditionViewer({ condition }: ConditionViewerProps) {
   return (
     <div className='p-1.5 rounded-md bg-accent text-sm'>
-      <div className='flex items-center gap-2 mb-1'>
+      <div className='flex flex-wrap items-center gap-2 mb-1'>
         <div className='font-medium'>{condition.type}</div>
         <div className='text-xs text-muted-foreground'>
           ({condition.opcode})
@@ -134,9 +134,12 @@ function ConditionViewer({ condition }: ConditionViewerProps) {
       </div>
       <div className='space-y-1 text-xs'>
         {Object.entries(condition.args).map(([key, value]) => (
-          <div key={key} className='flex items-start gap-2'>
-            <div className='text-muted-foreground min-w-24'>{key}:</div>
-            <div className='flex-1'>
+          <div
+            key={key}
+            className='flex flex-col sm:flex-row sm:items-start gap-1 sm:gap-2'
+          >
+            <div className='text-muted-foreground sm:min-w-24'>{key}:</div>
+            <div className='flex-1 break-all'>
               {value.type === ConditionArgType.Copiable ||
               value.type === ConditionArgType.CoinId ? (
                 <Truncated
@@ -163,22 +166,28 @@ function CoinViewer({ coin }: CoinViewerProps) {
     <div className='flex flex-col gap-2'>
       <div className='flex flex-col p-2 rounded-md bg-accent'>
         <div className='text-sm text-muted-foreground'>Coin ID</div>
-        <Truncated value={coin.coinId} href={`/coin/${coin.coinId}`} />
+        <div className='break-all'>
+          <Truncated value={coin.coinId} href={`/coin/${coin.coinId}`} />
+        </div>
       </div>
       <div className='flex flex-col p-2 rounded-md bg-accent'>
         <div className='text-sm text-muted-foreground'>Parent Coin Info</div>
-        <Truncated
-          value={coin.parentCoinInfo}
-          href={`/coin/${coin.parentCoinInfo}`}
-        />
+        <div className='break-all'>
+          <Truncated
+            value={coin.parentCoinInfo}
+            href={`/coin/${coin.parentCoinInfo}`}
+          />
+        </div>
       </div>
       <div className='flex flex-col p-2 rounded-md bg-accent'>
         <div className='text-sm text-muted-foreground'>Puzzle Hash</div>
-        <Truncated value={coin.puzzleHash} />
+        <div className='break-all'>
+          <Truncated value={coin.puzzleHash} />
+        </div>
       </div>
       <div className='flex flex-col p-2 rounded-md bg-accent'>
         <div className='text-sm text-muted-foreground'>Amount</div>
-        <div>{coin.amount}</div>
+        <div className='break-all'>{coin.amount}</div>
       </div>
     </div>
   );
