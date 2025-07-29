@@ -7,7 +7,7 @@ import { toDecimal, truncateHash } from '@/lib/conversions';
 import { intlFormat } from 'date-fns';
 import { CoinsIcon, DatabaseIcon, HashIcon, LayersIcon } from 'lucide-react';
 import { useEffect, useState } from 'react';
-import { useParams } from 'react-router-dom';
+import { Link, useParams } from 'react-router-dom';
 
 export function Block() {
   const { hash } = useParams();
@@ -43,8 +43,8 @@ export function Block() {
       </div>
 
       {block && (
-        <div className='space-y-6'>
-          <div className='grid gap-3 lg:grid-cols-2'>
+        <div className='mt-4'>
+          <div className='grid gap-4 lg:grid-cols-2'>
             <section className='bg-card border rounded-lg p-6'>
               <h2 className='text-xl font-medium mb-4 flex items-center gap-2'>
                 <HashIcon className='w-5 h-5' />
@@ -109,50 +109,65 @@ export function Block() {
 
           {block?.transaction_info ? (
             <>
-              <div className='flex items-center gap-2 mb-4'>
-                <CoinsIcon className='w-5 h-5' />
-                <h2 className='text-xl font-medium'>Coins</h2>
-                <div className='flex items-center gap-1 text-sm ml-2'>
-                  <span className='text-green-600'>
-                    +{block.transaction_info.additions}
-                  </span>
-                  <span className='text-red-500'>
-                    -{block.transaction_info.removals}
-                  </span>
+              <div className='grid md:grid-cols-2 gap-4 mt-6'>
+                <div>
+                  <div className='flex items-center gap-2 mb-4'>
+                    <CoinsIcon className='w-5 h-5' />
+                    <h2 className='text-xl font-medium'>Spent</h2>
+                    <div className='text-sm text-red-600'>
+                      -{block.transaction_info.removals}
+                    </div>
+                  </div>
+                  <div className='space-y-2'>
+                    {coins
+                      .filter((coin) => coin.spent_height === block.height)
+                      .map((coin) => (
+                        <CoinCard
+                          key={`spent-${coin.coin_id}`}
+                          coinRecord={coin}
+                          block={block}
+                        />
+                      ))}
+                  </div>
                 </div>
-              </div>
 
-              <div className='space-y-3 max-h-[600px] pr-2'>
-                {coins.map((coin) => (
-                  <CoinCard
-                    key={coin.coin_id}
-                    coinRecord={coin}
-                    block={block}
-                  />
-                ))}
+                <div>
+                  <div className='flex items-center gap-2 mb-4'>
+                    <CoinsIcon className='w-5 h-5' />
+                    <h2 className='text-xl font-medium'>Created</h2>
+                    <div className='text-sm text-green-600'>
+                      +{block.transaction_info.additions}
+                    </div>
+                  </div>
+                  <div className='space-y-2'>
+                    {coins
+                      .filter((coin) => coin.created_height === block.height)
+                      .map((coin) => (
+                        <CoinCard
+                          key={`created-${coin.coin_id}`}
+                          coinRecord={coin}
+                          block={block}
+                        />
+                      ))}
+                  </div>
+                </div>
               </div>
             </>
           ) : (
-            <>
-              <div className='flex items-center gap-2 mb-4'>
-                <CoinsIcon className='w-5 h-5' />
-                <h2 className='text-xl font-medium'>Coins</h2>
-              </div>
-              <Alert className='mt-3'>
-                <LayersIcon />
-                <AlertTitle>This is a non-transaction block</AlertTitle>
-                <AlertDescription>
-                  <p>
-                    This block doesn't contain any reward coins or transactions.
-                    You can learn more about non-transaction blocks on the{' '}
-                    <External href='https://docs.chia.net/chia-blockchain/consensus/chains/foliage/'>
-                      Chia documentation
-                    </External>
-                    .
-                  </p>
-                </AlertDescription>
-              </Alert>
-            </>
+            <Alert className='mt-4'>
+              <LayersIcon />
+              <AlertTitle>This is a non-transaction block</AlertTitle>
+              <AlertDescription>
+                <p>
+                  This block doesn't contain any reward coins or transactions.
+                  You can learn more about non-transaction blocks on the{' '}
+                  <External href='https://docs.chia.net/chia-blockchain/consensus/chains/foliage/'>
+                    Chia documentation
+                  </External>
+                  .
+                </p>
+              </AlertDescription>
+            </Alert>
           )}
         </div>
       )}
@@ -187,76 +202,64 @@ function CoinCard({ coinRecord, block }: CoinCardProps) {
   const token =
     coinRecord.type === 'cat'
       ? tokens[coinRecord.asset_id.replace('0x', '')]
-      : coinRecord.type === 'unknown'
+      : coinRecord.type === 'unknown' || coinRecord.type === 'reward'
         ? tokens['xch']
         : null;
 
   return (
-    <div
-      className={`bg-card border rounded-lg hover:bg-accent/50 transition-colors`}
+    <Link
+      to={`/coin/${coinRecord.coin_id}`}
+      className='block bg-card border rounded-lg hover:bg-accent/50 transition-colors overflow-hidden'
     >
-      <div className='p-4'>
-        <div className='flex items-center gap-2 mb-3'>
-          {token?.icon && (
-            <img
-              src={token.icon}
-              alt={token.name}
-              className='w-6 h-6 rounded-full'
-            />
-          )}
-          <div className='font-medium text-lg'>
-            {toDecimal(
-              coinRecord.coin.amount,
-              coinRecord.type === 'cat' ? 3 : 12,
-            )}{' '}
-            <span className='text-muted-foreground'>
-              {token?.code || (coinRecord.type === 'cat' ? 'CAT' : 'XCH')}
-            </span>
+      <div className='p-3'>
+        <div className='flex items-center gap-2'>
+          <div className='flex items-center gap-2 flex-1'>
+            {token?.icon ? (
+              <img
+                src={token.icon}
+                alt={token.name}
+                className='w-6 h-6 rounded-full'
+              />
+            ) : (
+              <div className='w-6 h-6 rounded-full bg-primary/10 flex items-center justify-center'>
+                <CoinsIcon className='w-3.5 h-3.5 text-primary' />
+              </div>
+            )}
+            <div>
+              <div className='font-medium flex items-center gap-1.5'>
+                {toDecimal(
+                  coinRecord.coin.amount,
+                  coinRecord.type === 'cat' ? 3 : 12,
+                )}{' '}
+                <span className='text-muted-foreground font-normal'>
+                  {token?.code ||
+                    (coinRecord.type === 'cat'
+                      ? 'CAT'
+                      : coinRecord.type === 'unknown' ||
+                          coinRecord.type === 'reward'
+                        ? 'XCH'
+                        : '')}
+                </span>
+              </div>
+              <div className='font-mono text-xs text-muted-foreground'>
+                {truncateHash(coinRecord.coin_id)}
+              </div>
+            </div>
           </div>
-          <div className='flex gap-1.5 ml-auto'>
+          <div className='flex gap-1.5'>
             {isCreated && (
-              <div className='px-2 py-1 bg-green-500/10 text-green-500 rounded-full text-xs font-medium'>
+              <div className='px-1.5 py-0.5 bg-green-500/10 text-green-600 dark:text-green-400 rounded-full text-xs font-medium flex items-center gap-1'>
                 Created
               </div>
             )}
             {isSpent && (
-              <div className='px-2 py-1 bg-red-500/10 text-red-500 rounded-full text-xs font-medium'>
+              <div className='px-1.5 py-0.5 bg-red-500/10 text-red-600 dark:text-red-400 rounded-full text-xs font-medium flex items-center gap-1'>
                 Spent
               </div>
             )}
           </div>
         </div>
-
-        <div className='space-y-2 text-sm'>
-          <div>
-            <div className='text-muted-foreground'>Coin ID</div>
-            <div className='font-mono'>{truncateHash(coinRecord.coin_id)}</div>
-          </div>
-          <div>
-            <div className='text-muted-foreground'>Puzzle Hash</div>
-            <div className='font-mono'>
-              {truncateHash(coinRecord.coin.puzzle_hash)}
-            </div>
-          </div>
-          {coinRecord.type === 'cat' && (
-            <div>
-              <div className='text-muted-foreground'>Asset ID</div>
-              <div className='font-mono'>
-                {truncateHash(coinRecord.asset_id)}
-              </div>
-            </div>
-          )}
-          <div className='text-muted-foreground text-xs'>
-            {isCreated
-              ? `Created at height ${coinRecord.created_height.toLocaleString()}`
-              : ''}
-            {isCreated && isSpent ? ' • ' : ''}
-            {isSpent
-              ? `Spent at height ${coinRecord.spent_height?.toLocaleString()}`
-              : ''}
-          </div>
-        </div>
       </div>
-    </div>
+    </Link>
   );
 }

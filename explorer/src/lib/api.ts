@@ -92,6 +92,10 @@ export interface CoinsResponse {
   coins: CoinRecord[];
 }
 
+export interface CoinResponse {
+  coin: CoinRecord | null;
+}
+
 export async function getBlocks() {
   const response = await get<BlocksResponse>('/blocks?reverse=true&limit=10');
   return response.blocks;
@@ -105,4 +109,9 @@ export async function getBlock(hash: string) {
 export async function getCoins(headerHash: string) {
   const response = await get<CoinsResponse>(`/coins/block/${headerHash}`);
   return response.coins;
+}
+
+export async function getCoin(id: string) {
+  const response = await get<CoinResponse>(`/coins/id/${id}`);
+  return response.coin;
 }

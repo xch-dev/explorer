@@ -7,6 +7,7 @@ import {
 import { DarkModeProvider } from './contexts/DarkModeContext';
 import { DexieProvider } from './contexts/DexieContext';
 import { Block } from './pages/Block';
+import { Coin } from './pages/Coin';
 import { Home } from './pages/Home';
 
 const router = createBrowserRouter(
@@ -14,6 +15,7 @@ const router = createBrowserRouter(
     <>
       <Route path='/' element={<Home />} />
       <Route path='/block/:hash' element={<Block />} />
+      <Route path='/coin/:id' element={<Coin />} />
     </>,
   ),
 );
