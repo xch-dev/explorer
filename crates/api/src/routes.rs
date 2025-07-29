@@ -11,7 +11,7 @@ use rocksdb::Direction;
 use serde::{Deserialize, Serialize};
 use tower_http::cors::{Any, CorsLayer};
 use xchdev_db::Database;
-use xchdev_types::{BlockRecord, CoinRecord};
+use xchdev_types::{BlockRecord, CoinRecord, CoinSpendRecord};
 
 #[derive(Clone)]
 pub struct App {
@@ -32,6 +32,7 @@ pub fn router(app: App) -> Router {
         .route("/coins/block/{hash}", get(coins_by_block))
         .route("/coins/children/{coin_id}", get(coins_by_parent))
         .route("/coins/id/{coin_id}", get(coin_by_id))
+        .route("/spend/{coin_id}", get(spend_by_coin_id))
         .with_state(app)
         .layer(cors)
 }
@@ -217,4 +218,20 @@ async fn coin_by_id(
     Ok(Json(CoinResponse {
         coin: Coin { coin_id, row },
     }))
+}
+
+#[derive(Serialize)]
+pub struct SpendResponse {
+    pub spend: CoinSpendRecord,
+}
+
+async fn spend_by_coin_id(
+    State(app): State<App>,
+    Path(coin_id): Path<Bytes32>,
+) -> Result<Json<SpendResponse>, StatusCode> {
+    let Some(spend) = app.db.coin_spend(coin_id).unwrap() else {
+        return Err(StatusCode::NOT_FOUND);
+    };
+
+    Ok(Json(SpendResponse { spend }))
 }

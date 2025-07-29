@@ -80,6 +80,13 @@ export interface Coin {
   amount: number | bigint;
 }
 
+export interface CoinSpend {
+  coin: Coin;
+  puzzle_reveal: string;
+  solution: string;
+  spent_height: number;
+}
+
 export interface BlocksResponse {
   blocks: BlockRecord[];
 }
@@ -94,6 +101,10 @@ export interface CoinsResponse {
 
 export interface CoinResponse {
   coin: CoinRecord | null;
+}
+
+export interface CoinSpendResponse {
+  spend: CoinSpend | null;
 }
 
 export async function getBlocks() {
@@ -119,4 +130,9 @@ export async function getCoins(headerHash: string) {
 export async function getCoin(id: string) {
   const response = await get<CoinResponse>(`/coins/id/${id}`);
   return response.coin;
+}
+
+export async function getCoinSpend(id: string) {
+  const response = await get<CoinSpendResponse>(`/spend/${id}`);
+  return response.spend;
 }
