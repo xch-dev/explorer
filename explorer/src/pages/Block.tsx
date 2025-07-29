@@ -226,7 +226,7 @@ function CoinCard({ coinRecord, block }: CoinCardProps) {
             {nft ? (
               <img
                 src={nft.data?.thumbnail_uri}
-                alt={nft.name}
+                alt={nft.data?.metadata_json?.name ?? 'Unnamed'}
                 className='w-6 h-6 rounded flex-shrink-0 object-cover'
               />
             ) : token?.icon ? (
@@ -243,7 +243,9 @@ function CoinCard({ coinRecord, block }: CoinCardProps) {
             <div className='min-w-0'>
               <div className='font-medium flex flex-wrap items-center gap-1.5'>
                 {nft ? (
-                  <span className='break-all'>{nft.name || 'Unnamed'}</span>
+                  <span className='break-all'>
+                    {nft.data?.metadata_json?.name ?? 'Unnamed'}
+                  </span>
                 ) : (
                   <>
                     <span className='break-all'>

@@ -4,10 +4,12 @@ import { createContext, useCallback, useState, type ReactNode } from 'react';
 export interface Nft {
   id: string;
   encoded_id: string;
-  name?: string;
   data?: {
     thumbnail_uri?: string;
     preview_uri?: string;
+    metadata_json?: {
+      name?: string;
+    };
   };
 }
 

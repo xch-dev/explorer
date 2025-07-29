@@ -5,7 +5,7 @@ import { Nft } from '@/contexts/MintGardenContext';
 import { useDexie } from '@/hooks/useDexie';
 import { useMintGarden } from '@/hooks/useMintGarden';
 import { BlockRecord, CoinRecord, getBlockByHeight, getCoin } from '@/lib/api';
-import { toDecimal } from '@/lib/conversions';
+import { toAddress, toDecimal } from '@/lib/conversions';
 import { intlFormat } from 'date-fns';
 import {
   ArrowUpCircleIcon,
@@ -56,15 +56,17 @@ export function Coin() {
     : null;
 
   const icon = token?.icon ?? nft?.data?.thumbnail_uri;
-  const name = token?.name ?? nft?.name;
+  const name = token?.name ?? nft?.data?.metadata_json?.name;
   const assetId =
     coin?.type === 'cat'
       ? coin.asset_id
-      : coin?.type === 'singleton' ||
-          coin?.type === 'nft' ||
-          coin?.type === 'did'
+      : coin?.type === 'singleton'
         ? coin.launcher_id
-        : null;
+        : coin?.type === 'nft'
+          ? toAddress(coin.launcher_id, 'nft')
+          : coin?.type === 'did'
+            ? toAddress(coin.launcher_id, 'did:chia:')
+            : null;
 
   return (
     <Layout>
