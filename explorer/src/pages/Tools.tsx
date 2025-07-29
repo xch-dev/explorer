@@ -1,7 +1,6 @@
 import { Layout } from '@/components/Layout';
 import { Truncated } from '@/components/Truncated';
 import { Textarea } from '@/components/ui/textarea';
-import { useMintGarden } from '@/hooks/useMintGarden';
 import { parseJson } from '@/lib/json';
 import {
   ConditionArgType,
@@ -73,8 +72,6 @@ interface BundleViewerProps {
 }
 
 function BundleViewer({ bundle }: BundleViewerProps) {
-  const { fetchNft } = useMintGarden();
-
   return (
     <div className='flex flex-col gap-2 mt-4'>
       {bundle.coinSpends.map((spend) => (
@@ -137,6 +134,7 @@ function SpendViewer({ spend }: SpendViewerProps) {
         <div className='flex flex-col gap-2'>
           <div className='text-sm text-muted-foreground'>Output Conditions</div>
           {spend.conditions.map((condition, index) => (
+            // eslint-disable-next-line react/no-array-index-key -- immutable
             <ConditionViewer key={index} condition={condition} />
           ))}
         </div>
