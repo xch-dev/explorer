@@ -80,29 +80,24 @@ function BundleViewer({ bundle }: BundleViewerProps) {
   );
   const { tokens } = useDexie();
 
-  const totalCost = useMemo(() => {
-    return bundle.coinSpends.reduce((acc, spend) => {
-      const cost = typeof spend.cost === 'number' ? spend.cost : 0;
-      return acc + cost;
-    }, 0);
-  }, [bundle.coinSpends]);
-
   return (
     <div className='flex flex-col gap-4 mt-4'>
-      <div className='p-4 rounded-md bg-card'>
-        <div className='text-lg font-medium mb-2'>Bundle Information</div>
-        <div className='grid grid-cols-2 gap-4 text-sm'>
-          <div>
-            <div className='text-muted-foreground'>Total Cost</div>
-            <div>{totalCost}</div>
+      <div className='p-4 rounded-md bg-card border border-input'>
+        <div className='text-lg font-medium mb-2'>Spend Bundle</div>
+        <div className='flex flex-col gap-1 text-sm'>
+          <div className='flex flex-col'>
+            <div className='text-muted-foreground'>Cost</div>
+            <div>{bundle.totalCost}</div>
           </div>
-          <div>
-            <div className='text-muted-foreground'>Total Spends</div>
+
+          <div className='flex flex-col'>
+            <div className='text-muted-foreground'>Spends</div>
             <div>{bundle.coinSpends.length}</div>
           </div>
-          <div className='col-span-2'>
+
+          <div className='flex flex-col'>
             <div className='text-muted-foreground'>Bundle Hash</div>
-            <div className='truncate'>0x1234567890abcdef</div>
+            <Truncated value={bundle.hash} />
           </div>
         </div>
       </div>
@@ -192,7 +187,7 @@ function SpendViewer({ spend }: SpendViewerProps) {
   return (
     <div className='flex flex-col gap-3 p-3 rounded-t-none rounded-md bg-card border border-t-0 border-input'>
       <div className='grid grid-cols-1 md:grid-cols-2 gap-3'>
-        <div className='flex flex-col gap-1 p-2 rounded-md bg-accent text-sm'>
+        <div className='flex flex-col gap-1 p-2 rounded-md text-sm border border-input/30 bg-accent/40'>
           <div className='flex flex-col'>
             <div className='text-muted-foreground'>Coin ID</div>
             <Truncated
@@ -217,7 +212,7 @@ function SpendViewer({ spend }: SpendViewerProps) {
           </div>
         </div>
 
-        <div className='flex flex-col gap-1 p-2 rounded-md bg-accent text-sm'>
+        <div className='flex flex-col gap-1 p-2 rounded-md text-sm border border-input/30 bg-accent/40'>
           <div className='flex flex-col'>
             <div className='text-muted-foreground'>Puzzle Reveal</div>
             <Truncated value={spend.puzzleReveal} />

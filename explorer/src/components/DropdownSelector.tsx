@@ -110,7 +110,7 @@ export function DropdownSelector<T>({
     >
       <Button
         variant='outline'
-        className={`w-full justify-start p-2 h-12 ${className ?? ''}`}
+        className={`w-full justify-start p-2 h-16 ${className ?? ''}`}
         onClick={() => setIsOpen(!isOpen)}
         aria-expanded={isOpen}
         aria-haspopup='listbox'
@@ -123,7 +123,7 @@ export function DropdownSelector<T>({
 
       {isOpen && (
         <div
-          className={`absolute z-50 ${width} bg-background border rounded-md shadow-lg`}
+          className={`absolute z-50 ${width} bg-background border rounded-b-md shadow-lg`}
           role='listbox'
           aria-label='Options'
         >
@@ -156,13 +156,13 @@ export function DropdownSelector<T>({
                     role='option'
                     aria-selected={i === selectedIndex}
                     aria-disabled={disabled}
-                    className={`px-2 py-1.5 text-sm rounded-sm cursor-pointer ${
+                    className={`px-2 py-3 text-sm cursor-pointer ${
                       disabled
                         ? 'opacity-50 cursor-not-allowed'
                         : i === selectedIndex
                           ? 'bg-accent'
                           : 'hover:bg-accent'
-                    }`}
+                    } ${i === loadedItems.length - 1 ? 'rounded-b-md' : ''}`}
                   >
                     {renderItem(item)}
                   </div>

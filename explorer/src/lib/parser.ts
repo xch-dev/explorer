@@ -16,6 +16,8 @@ export interface ParsedSpendBundle {
   coinSpends: ParsedCoinSpend[];
   aggregatedSignature: string;
   fee: string;
+  totalCost: string;
+  hash: string;
 }
 
 export interface ParsedCoinSpend {
@@ -202,6 +204,10 @@ export function parseSpendBundle(
     ),
     aggregatedSignature: `0x${toHex(spendBundle.aggregatedSignature.toBytes())}`,
     fee: '0',
+    totalCost: deserializedCoinSpends
+      .reduce((acc, coinSpend) => acc + coinSpend.cost, 0n)
+      .toLocaleString(),
+    hash: `0x${toHex(spendBundle.hash())}`,
   };
 }
 
