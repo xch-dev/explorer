@@ -5,7 +5,6 @@ import { parseJson } from '@/lib/json';
 import {
   ConditionArgType,
   ConditionType,
-  ParsedCoin,
   ParsedCoinSpend,
   ParsedCondition,
   ParsedSpendBundle,
@@ -90,20 +89,49 @@ interface SpendViewerProps {
 
 function SpendViewer({ spend }: SpendViewerProps) {
   return (
-    <div className='flex flex-col gap-2 p-2 rounded-md bg-card'>
-      <CoinViewer coin={spend.coin} />
-      <div className='flex flex-col p-2 rounded-md bg-accent'>
-        <div className='text-sm text-muted-foreground'>Puzzle Reveal</div>
-        <Truncated value={spend.puzzleReveal} />
+    <div className='flex flex-col gap-3 p-3 rounded-md bg-card'>
+      <div className='grid grid-cols-1 md:grid-cols-2 gap-3'>
+        <div className='flex flex-col gap-1 p-2 rounded-md bg-accent text-sm'>
+          <div className='flex flex-col'>
+            <div className='text-muted-foreground'>Coin ID</div>
+            <Truncated
+              value={spend.coin.coinId}
+              href={`/coin/${spend.coin.coinId}`}
+            />
+          </div>
+          <div className='flex flex-col'>
+            <div className='text-muted-foreground'>Parent ID</div>
+            <Truncated
+              value={spend.coin.parentCoinInfo}
+              href={`/coin/${spend.coin.parentCoinInfo}`}
+            />
+          </div>
+          <div className='flex flex-col'>
+            <div className='text-muted-foreground'>Puzzle Hash</div>
+            <Truncated value={spend.coin.puzzleHash} />
+          </div>
+          <div className='flex flex-col'>
+            <div className='text-muted-foreground'>Amount</div>
+            <div>{spend.coin.amount}</div>
+          </div>
+        </div>
+
+        <div className='flex flex-col gap-1 p-2 rounded-md bg-accent text-sm'>
+          <div className='flex flex-col'>
+            <div className='text-muted-foreground'>Puzzle Reveal</div>
+            <Truncated value={spend.puzzleReveal} />
+          </div>
+          <div className='flex flex-col'>
+            <div className='text-muted-foreground'>Solution</div>
+            <Truncated value={spend.solution} />
+          </div>
+          <div className='flex flex-col'>
+            <div className='text-muted-foreground'>Runtime Cost</div>
+            <div>{spend.runtimeCost}</div>
+          </div>
+        </div>
       </div>
-      <div className='flex flex-col p-2 rounded-md bg-accent'>
-        <div className='text-sm text-muted-foreground'>Solution</div>
-        <Truncated value={spend.solution} />
-      </div>
-      <div className='flex flex-col p-2 rounded-md bg-accent'>
-        <div className='text-sm text-muted-foreground'>Runtime Cost</div>
-        <div>{spend.runtimeCost}</div>
-      </div>
+
       {spend.conditions.length > 0 && (
         <div className='flex flex-col gap-2'>
           <div className='text-sm text-muted-foreground'>Output Conditions</div>
@@ -114,10 +142,6 @@ function SpendViewer({ spend }: SpendViewerProps) {
       )}
     </div>
   );
-}
-
-interface CoinViewerProps {
-  coin: ParsedCoin;
 }
 
 interface ConditionViewerProps {
@@ -176,38 +200,6 @@ function ConditionViewer({ condition }: ConditionViewerProps) {
             </div>
           </div>
         ))}
-      </div>
-    </div>
-  );
-}
-
-function CoinViewer({ coin }: CoinViewerProps) {
-  return (
-    <div className='flex flex-col gap-2'>
-      <div className='flex flex-col p-2 rounded-md bg-accent'>
-        <div className='text-sm text-muted-foreground'>Coin ID</div>
-        <div className='break-all'>
-          <Truncated value={coin.coinId} href={`/coin/${coin.coinId}`} />
-        </div>
-      </div>
-      <div className='flex flex-col p-2 rounded-md bg-accent'>
-        <div className='text-sm text-muted-foreground'>Parent Coin Info</div>
-        <div className='break-all'>
-          <Truncated
-            value={coin.parentCoinInfo}
-            href={`/coin/${coin.parentCoinInfo}`}
-          />
-        </div>
-      </div>
-      <div className='flex flex-col p-2 rounded-md bg-accent'>
-        <div className='text-sm text-muted-foreground'>Puzzle Hash</div>
-        <div className='break-all'>
-          <Truncated value={coin.puzzleHash} />
-        </div>
-      </div>
-      <div className='flex flex-col p-2 rounded-md bg-accent'>
-        <div className='text-sm text-muted-foreground'>Amount</div>
-        <div className='break-all'>{coin.amount}</div>
       </div>
     </div>
   );
