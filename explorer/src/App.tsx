@@ -6,6 +6,7 @@ import {
 } from 'react-router-dom';
 import { DarkModeProvider } from './contexts/DarkModeContext';
 import { DexieProvider } from './contexts/DexieContext';
+import { MintGardenProvider } from './contexts/MintGardenContext';
 import { Block } from './pages/Block';
 import { Coin } from './pages/Coin';
 import { Home } from './pages/Home';
@@ -24,7 +25,9 @@ export default function App() {
   return (
     <DarkModeProvider>
       <DexieProvider>
-        <RouterProvider router={router} />
+        <MintGardenProvider>
+          <RouterProvider router={router} />
+        </MintGardenProvider>
       </DexieProvider>
     </DarkModeProvider>
   );

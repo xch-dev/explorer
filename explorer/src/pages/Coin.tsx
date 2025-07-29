@@ -1,7 +1,9 @@
 import { ColoredLink } from '@/components/ColoredLink';
 import { Layout } from '@/components/Layout';
 import { Truncated } from '@/components/Truncated';
+import { Nft } from '@/contexts/MintGardenContext';
 import { useDexie } from '@/hooks/useDexie';
+import { useMintGarden } from '@/hooks/useMintGarden';
 import { BlockRecord, CoinRecord, getBlockByHeight, getCoin } from '@/lib/api';
 import { toDecimal } from '@/lib/conversions';
 import { intlFormat } from 'date-fns';
@@ -19,10 +21,12 @@ import { useParams } from 'react-router-dom';
 export function Coin() {
   const { id } = useParams();
   const { tokens } = useDexie();
+  const { fetchNft } = useMintGarden();
 
   const [coin, setCoin] = useState<CoinRecord | null>(null);
   const [createdBlock, setCreatedBlock] = useState<BlockRecord | null>(null);
   const [spentBlock, setSpentBlock] = useState<BlockRecord | null>(null);
+  const [nft, setNft] = useState<Nft | null>(null);
 
   useEffect(() => {
     if (!id) return;
@@ -31,32 +35,48 @@ export function Coin() {
 
   useEffect(() => {
     if (!coin) return;
+
     getBlockByHeight(coin.created_height).then(setCreatedBlock);
 
     if (coin.spent_height) {
       getBlockByHeight(coin.spent_height).then(setSpentBlock);
     }
-  }, [coin]);
+
+    if (coin.type === 'nft') {
+      fetchNft(coin.launcher_id).then(setNft);
+    }
+  }, [coin, fetchNft]);
 
   const token = coin
     ? coin.type === 'cat'
       ? tokens[coin.asset_id.replace('0x', '')]
-      : coin.type === 'unknown' || coin.type === 'reward'
+      : coin.type === 'reward'
         ? tokens['xch']
         : null
     : null;
+
+  const icon = token?.icon ?? nft?.data?.thumbnail_uri;
+  const name = token?.name ?? nft?.name;
+  const assetId =
+    coin?.type === 'cat'
+      ? coin.asset_id
+      : coin?.type === 'singleton' ||
+          coin?.type === 'nft' ||
+          coin?.type === 'did'
+        ? coin.launcher_id
+        : null;
 
   return (
     <Layout>
       <div className='flex flex-col gap-4'>
         <div className='flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4'>
           <div className='flex items-center gap-3'>
-            {(coin?.type === 'reward' || coin?.type === 'cat') && token ? (
+            {coin !== null && (token || nft) ? (
               <>
-                {token.icon ? (
+                {icon ? (
                   <img
-                    src={token.icon}
-                    alt={token.name}
+                    src={icon}
+                    alt={name}
                     className='w-12 h-12 rounded-full flex-shrink-0'
                   />
                 ) : (
@@ -66,17 +86,13 @@ export function Coin() {
                 )}
                 <div className='min-w-0'>
                   <h1 className='text-2xl sm:text-3xl font-semibold truncate'>
-                    {token.name || 'Unnamed Token'}
+                    {name || 'Unnamed'}
                   </h1>
                   <div className='flex flex-col sm:flex-row sm:items-center gap-1 sm:gap-2 text-muted-foreground'>
-                    <span>{token.code || 'Unknown Asset'}</span>
-                    {coin.type === 'cat' && (
-                      <>
-                        <span className='hidden sm:block'>•</span>
-                        <div className='font-mono text-sm'>
-                          <Truncated value={coin.asset_id} />
-                        </div>
-                      </>
+                    {assetId && (
+                      <div className='font-mono text-sm'>
+                        <Truncated value={assetId} />
+                      </div>
                     )}
                   </div>
                 </div>

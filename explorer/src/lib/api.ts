@@ -97,7 +97,7 @@ export interface CoinResponse {
 }
 
 export async function getBlocks() {
-  const response = await get<BlocksResponse>('/blocks?reverse=true&limit=10');
+  const response = await get<BlocksResponse>('/blocks?reverse=true&limit=50');
   return response.blocks;
 }
 

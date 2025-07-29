@@ -2,7 +2,9 @@ import { External } from '@/components/External';
 import { Layout } from '@/components/Layout';
 import { Truncated } from '@/components/Truncated';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
+import { Nft } from '@/contexts/MintGardenContext';
 import { useDexie } from '@/hooks/useDexie';
+import { useMintGarden } from '@/hooks/useMintGarden';
 import { BlockRecord, CoinRecord, getBlock, getCoins } from '@/lib/api';
 import { toAddress, toDecimal } from '@/lib/conversions';
 import { intlFormat } from 'date-fns';
@@ -114,7 +116,7 @@ export function Block() {
                   <div className='flex items-center gap-2 mb-4'>
                     <CoinsIcon className='w-5 h-5' />
                     <h2 className='text-xl font-medium'>Spent</h2>
-                    <div className='text-sm text-red-600'>
+                    <div className='text-lg text-red-600'>
                       -{block.transaction_info.removals}
                     </div>
                   </div>
@@ -135,7 +137,7 @@ export function Block() {
                   <div className='flex items-center gap-2 mb-4'>
                     <CoinsIcon className='w-5 h-5' />
                     <h2 className='text-xl font-medium'>Created</h2>
-                    <div className='text-sm text-green-600'>
+                    <div className='text-lg text-green-600'>
                       +{block.transaction_info.additions}
                     </div>
                   </div>
@@ -195,11 +197,19 @@ interface CoinCardProps {
 
 function CoinCard({ coinRecord, block }: CoinCardProps) {
   const { tokens } = useDexie();
+  const { fetchNft } = useMintGarden();
+  const [nft, setNft] = useState<Nft | null>(null);
   const isCreated = coinRecord.created_height === block?.height;
   const isSpent = coinRecord.spent_height === block?.height;
 
+  useEffect(() => {
+    if (coinRecord.type === 'nft' && 'launcher_id' in coinRecord) {
+      fetchNft(coinRecord.launcher_id).then(setNft);
+    }
+  }, [coinRecord, fetchNft]);
+
   const token =
-    coinRecord.type === 'cat'
+    coinRecord.type === 'cat' && 'asset_id' in coinRecord
       ? tokens[coinRecord.asset_id.replace('0x', '')]
       : coinRecord.type === 'unknown' || coinRecord.type === 'reward'
         ? tokens['xch']
@@ -213,7 +223,13 @@ function CoinCard({ coinRecord, block }: CoinCardProps) {
       <div className='p-1.5'>
         <div className='flex flex-wrap items-center gap-2'>
           <div className='flex items-center gap-2 min-w-0 flex-1'>
-            {token?.icon ? (
+            {nft ? (
+              <img
+                src={nft.data?.thumbnail_uri}
+                alt={nft.name}
+                className='w-6 h-6 rounded flex-shrink-0 object-cover'
+              />
+            ) : token?.icon ? (
               <img
                 src={token.icon}
                 alt={token.name}
@@ -226,21 +242,27 @@ function CoinCard({ coinRecord, block }: CoinCardProps) {
             )}
             <div className='min-w-0'>
               <div className='font-medium flex flex-wrap items-center gap-1.5'>
-                <span className='break-all'>
-                  {toDecimal(
-                    coinRecord.coin.amount,
-                    coinRecord.type === 'cat' ? 3 : 12,
-                  )}
-                </span>{' '}
-                <span className='text-muted-foreground font-normal'>
-                  {token?.code ||
-                    (coinRecord.type === 'cat'
-                      ? 'CAT'
-                      : coinRecord.type === 'unknown' ||
-                          coinRecord.type === 'reward'
-                        ? 'XCH'
-                        : '')}
-                </span>
+                {nft ? (
+                  <span className='break-all'>{nft.name || 'Unnamed'}</span>
+                ) : (
+                  <>
+                    <span className='break-all'>
+                      {toDecimal(
+                        coinRecord.coin.amount,
+                        coinRecord.type === 'cat' ? 3 : 12,
+                      )}
+                    </span>{' '}
+                    <span className='text-muted-foreground font-normal'>
+                      {token?.code ||
+                        (coinRecord.type === 'cat'
+                          ? 'CAT'
+                          : coinRecord.type === 'unknown' ||
+                              coinRecord.type === 'reward'
+                            ? 'XCH'
+                            : '')}
+                    </span>
+                  </>
+                )}
               </div>
               <div className='font-mono text-xs text-muted-foreground truncate'>
                 <Truncated value={coinRecord.coin_id} disableCopy />

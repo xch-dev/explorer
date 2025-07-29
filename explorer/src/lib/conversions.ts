@@ -23,6 +23,6 @@ export function stripHex(hash: string): string {
   return hash.replace('0x', '');
 }
 
-export function toAddress(hash: string): string {
-  return new Address(fromHex(stripHex(hash)), 'xch').encode();
+export function toAddress(hash: string, prefix = 'xch'): string {
+  return new Address(fromHex(stripHex(hash)), prefix).encode();
 }
