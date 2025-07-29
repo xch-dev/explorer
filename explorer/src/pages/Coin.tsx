@@ -115,8 +115,8 @@ export function Coin() {
         </div>
 
         {coin && (
-          <div className='grid gap-6 mt-2'>
-            <div className='grid gap-6 lg:grid-cols-2'>
+          <div className='grid gap-4 mt-2'>
+            <div className='grid gap-4 lg:grid-cols-2'>
               <section className='bg-card border rounded-xl p-6 shadow-sm'>
                 <h2 className='text-xl font-medium mb-6 flex items-center gap-2 pb-4 border-b'>
                   <HashIcon className='w-5 h-5 text-primary' />
