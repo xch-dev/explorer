@@ -3,8 +3,10 @@ import { Truncated } from '@/components/Truncated';
 import { Textarea } from '@/components/ui/textarea';
 import { parseJson } from '@/lib/json';
 import {
+  ConditionArgType,
   ParsedCoin,
   ParsedCoinSpend,
+  ParsedCondition,
   ParsedSpendBundle,
   parseSpendBundle,
 } from '@/lib/parser';
@@ -97,12 +99,63 @@ function SpendViewer({ spend }: SpendViewerProps) {
         <div className='text-sm text-muted-foreground'>Solution</div>
         <Truncated value={spend.solution} />
       </div>
+      <div className='flex flex-col p-2 rounded-md bg-accent'>
+        <div className='text-sm text-muted-foreground'>Runtime Cost</div>
+        <div>{spend.runtimeCost}</div>
+      </div>
+      {spend.conditions.length > 0 && (
+        <div className='flex flex-col gap-2'>
+          <div className='text-sm text-muted-foreground'>Output Conditions</div>
+          {spend.conditions.map((condition, index) => (
+            <ConditionViewer key={index} condition={condition} />
+          ))}
+        </div>
+      )}
     </div>
   );
 }
 
 interface CoinViewerProps {
   coin: ParsedCoin;
+}
+
+interface ConditionViewerProps {
+  condition: ParsedCondition;
+}
+
+function ConditionViewer({ condition }: ConditionViewerProps) {
+  return (
+    <div className='p-1.5 rounded-md bg-accent text-sm'>
+      <div className='flex items-center gap-2 mb-1'>
+        <div className='font-medium'>{condition.type}</div>
+        <div className='text-xs text-muted-foreground'>
+          ({condition.opcode})
+        </div>
+      </div>
+      <div className='space-y-1 text-xs'>
+        {Object.entries(condition.args).map(([key, value]) => (
+          <div key={key} className='flex items-start gap-2'>
+            <div className='text-muted-foreground min-w-24'>{key}:</div>
+            <div className='flex-1'>
+              {value.type === ConditionArgType.Copiable ||
+              value.type === ConditionArgType.CoinId ? (
+                <Truncated
+                  value={value.value}
+                  href={
+                    value.type === ConditionArgType.CoinId
+                      ? `/coin/${value.value}`
+                      : undefined
+                  }
+                />
+              ) : (
+                <div>{value.value}</div>
+              )}
+            </div>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
 }
 
 function CoinViewer({ coin }: CoinViewerProps) {
