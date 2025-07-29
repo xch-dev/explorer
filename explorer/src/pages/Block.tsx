@@ -1,12 +1,13 @@
 import { External } from '@/components/External';
 import { Layout } from '@/components/Layout';
+import { Truncated } from '@/components/Truncated';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { useDexie } from '@/hooks/useDexie';
 import { BlockRecord, CoinRecord, getBlock, getCoins } from '@/lib/api';
-import { toDecimal, truncateHash } from '@/lib/conversions';
+import { toAddress, toDecimal } from '@/lib/conversions';
 import { intlFormat } from 'date-fns';
 import { CoinsIcon, DatabaseIcon, HashIcon, LayersIcon } from 'lucide-react';
-import { useEffect, useState } from 'react';
+import { PropsWithChildren, useEffect, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
 
 export function Block() {
@@ -51,31 +52,33 @@ export function Block() {
                 Block Hashes
               </h2>
               <div className='grid gap-3 text-sm'>
-                <Field
-                  label='Block Hash'
-                  value={truncateHash(block.header_hash)}
-                />
-                <Field
-                  label='Previous Block'
-                  value={truncateHash(block.prev_block_hash)}
-                />
+                <Field label='Block Hash'>
+                  <Truncated
+                    value={block.header_hash}
+                    href={`/block/${block.header_hash}`}
+                  />
+                </Field>
+                <Field label='Previous Block'>
+                  <Truncated
+                    value={block.prev_block_hash}
+                    href={`/block/${block.prev_block_hash}`}
+                  />
+                </Field>
                 {block.transaction_info?.prev_transaction_block_hash && (
-                  <Field
-                    label='Previous Transaction Block'
-                    value={truncateHash(
-                      block.transaction_info.prev_transaction_block_hash,
-                    )}
-                  />
+                  <Field label='Previous Transaction Block'>
+                    <Truncated
+                      value={block.transaction_info.prev_transaction_block_hash}
+                      href={`/block/${block.transaction_info.prev_transaction_block_hash}`}
+                    />
+                  </Field>
                 )}
-                <Field
-                  label='Farmer Puzzle Hash'
-                  value={truncateHash(block.farmer_puzzle_hash)}
-                />
+                <Field label='Farmer Address'>
+                  <Truncated value={toAddress(block.farmer_puzzle_hash)} />
+                </Field>
                 {block.pool_puzzle_hash && (
-                  <Field
-                    label='Pool Puzzle Hash'
-                    value={truncateHash(block.pool_puzzle_hash)}
-                  />
+                  <Field label='Pool Address'>
+                    <Truncated value={toAddress(block.pool_puzzle_hash)} />
+                  </Field>
                 )}
               </div>
             </section>
@@ -86,21 +89,18 @@ export function Block() {
                 Block Details
               </h2>
               <div className='grid gap-3 text-sm'>
-                <Field
-                  label='Total Iterations'
-                  value={block.total_iters.toLocaleString()}
-                />
-                <Field label='Weight' value={block.weight.toLocaleString()} />
+                <Field label='Total Iterations'>
+                  {block.total_iters.toLocaleString()}
+                </Field>
+                <Field label='Weight'>{block.weight.toLocaleString()}</Field>
                 {block.transaction_info && (
                   <>
-                    <Field
-                      label='Transaction Cost'
-                      value={block.transaction_info.cost.toLocaleString()}
-                    />
-                    <Field
-                      label='Transaction Fees'
-                      value={`${toDecimal(block.transaction_info.fees, 12)} XCH`}
-                    />
+                    <Field label='Transaction Cost'>
+                      {block.transaction_info.cost.toLocaleString()}
+                    </Field>
+                    <Field label='Transaction Fees'>
+                      {`${toDecimal(block.transaction_info.fees, 12)} XCH`}
+                    </Field>
                   </>
                 )}
               </div>
@@ -175,16 +175,15 @@ export function Block() {
   );
 }
 
-interface FieldProps {
+interface FieldProps extends PropsWithChildren {
   label: string;
-  value: string | number;
 }
 
-function Field({ label, value }: FieldProps) {
+function Field({ label, children }: FieldProps) {
   return (
     <div>
-      <div className='text-muted-foreground mb-1'>{label}</div>
-      <div className='font-mono'>{value}</div>
+      <div className='text-muted-foreground'>{label}</div>
+      <div className='font-mono'>{children}</div>
     </div>
   );
 }
@@ -212,25 +211,27 @@ function CoinCard({ coinRecord, block }: CoinCardProps) {
       className='block bg-card border rounded-lg hover:bg-accent/50 transition-colors overflow-hidden'
     >
       <div className='p-3'>
-        <div className='flex items-center gap-2'>
-          <div className='flex items-center gap-2 flex-1'>
+        <div className='flex flex-wrap items-center gap-2'>
+          <div className='flex items-center gap-2 min-w-0 flex-1'>
             {token?.icon ? (
               <img
                 src={token.icon}
                 alt={token.name}
-                className='w-6 h-6 rounded-full'
+                className='w-6 h-6 rounded-full flex-shrink-0'
               />
             ) : (
-              <div className='w-6 h-6 rounded-full bg-primary/10 flex items-center justify-center'>
+              <div className='w-6 h-6 rounded-full bg-primary/10 flex items-center justify-center flex-shrink-0'>
                 <CoinsIcon className='w-3.5 h-3.5 text-primary' />
               </div>
             )}
-            <div>
-              <div className='font-medium flex items-center gap-1.5'>
-                {toDecimal(
-                  coinRecord.coin.amount,
-                  coinRecord.type === 'cat' ? 3 : 12,
-                )}{' '}
+            <div className='min-w-0'>
+              <div className='font-medium flex flex-wrap items-center gap-1.5'>
+                <span className='break-all'>
+                  {toDecimal(
+                    coinRecord.coin.amount,
+                    coinRecord.type === 'cat' ? 3 : 12,
+                  )}
+                </span>{' '}
                 <span className='text-muted-foreground font-normal'>
                   {token?.code ||
                     (coinRecord.type === 'cat'
@@ -241,21 +242,29 @@ function CoinCard({ coinRecord, block }: CoinCardProps) {
                         : '')}
                 </span>
               </div>
-              <div className='font-mono text-xs text-muted-foreground'>
-                {truncateHash(coinRecord.coin_id)}
+              <div className='font-mono text-xs text-muted-foreground truncate'>
+                <Truncated value={coinRecord.coin_id} disableCopy />
               </div>
             </div>
           </div>
-          <div className='flex gap-1.5'>
-            {isCreated && (
-              <div className='px-1.5 py-0.5 bg-green-500/10 text-green-600 dark:text-green-400 rounded-full text-xs font-medium flex items-center gap-1'>
-                Created
+          <div className='flex flex-wrap gap-1.5'>
+            {isCreated && isSpent ? (
+              <div className='px-1.5 py-0.5 bg-orange-500/10 text-orange-600 dark:text-orange-400 rounded-full text-xs font-medium flex items-center gap-1 whitespace-nowrap'>
+                Ephemeral
               </div>
-            )}
-            {isSpent && (
-              <div className='px-1.5 py-0.5 bg-red-500/10 text-red-600 dark:text-red-400 rounded-full text-xs font-medium flex items-center gap-1'>
-                Spent
-              </div>
+            ) : (
+              <>
+                {isCreated && (
+                  <div className='px-1.5 py-0.5 bg-green-500/10 text-green-600 dark:text-green-400 rounded-full text-xs font-medium flex items-center gap-1 whitespace-nowrap'>
+                    Created
+                  </div>
+                )}
+                {isSpent && (
+                  <div className='px-1.5 py-0.5 bg-red-500/10 text-red-600 dark:text-red-400 rounded-full text-xs font-medium flex items-center gap-1 whitespace-nowrap'>
+                    Spent
+                  </div>
+                )}
+              </>
             )}
           </div>
         </div>

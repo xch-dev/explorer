@@ -1,5 +1,7 @@
 import BigNumber from 'bignumber.js';
 
+import { Address, fromHex } from 'chia-wallet-sdk-wasm';
+
 BigNumber.config({ EXPONENTIAL_AT: [-1e9, 1e9] });
 
 export function toDecimal(amount: BigNumber.Value, decimals: number): string {
@@ -15,4 +17,12 @@ export function toBigNumber(
 
 export function truncateHash(hash: string): string {
   return hash.slice(0, 8) + '...' + hash.slice(-8);
+}
+
+export function stripHex(hash: string): string {
+  return hash.replace('0x', '');
+}
+
+export function toAddress(hash: string): string {
+  return new Address(fromHex(stripHex(hash)), 'xch').encode();
 }
