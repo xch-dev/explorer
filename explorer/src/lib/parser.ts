@@ -3,6 +3,7 @@ import {
   Clvm,
   Coin,
   CoinSpend,
+  Constants,
   Output,
   Program,
   Puzzle,
@@ -71,6 +72,7 @@ interface BundleContext {
   spentCoinIds: Set<string>;
   spentPuzzleHashes: Set<string>;
   createdCoinIds: Set<string>;
+  assertedCoinIds: Set<string>;
 }
 
 interface DeserializedCoinSpend {
@@ -98,6 +100,7 @@ export function parseSpendBundle(
     spentCoinIds: new Set(),
     spentPuzzleHashes: new Set(),
     createdCoinIds: new Set(),
+    assertedCoinIds: new Set(),
   };
 
   for (const coinSpend of spendBundle.coinSpends) {
@@ -157,6 +160,11 @@ export function parseSpendBundle(
           ),
         );
       }
+
+      const assertConcurrentSpend = condition.parseAssertConcurrentSpend();
+      if (assertConcurrentSpend) {
+        announcements.assertedCoinIds.add(toHex(assertConcurrentSpend.coinId));
+      }
     }
 
     deserializedCoinSpends.push({
@@ -178,16 +186,85 @@ export function parseSpendBundle(
 }
 
 function parseCoinSpend(
-  { coinSpend, output, conditions }: DeserializedCoinSpend,
+  { coinSpend, output, puzzle, conditions }: DeserializedCoinSpend,
   ctx: BundleContext,
 ): ParsedCoinSpend {
+  const coinId = coinSpend.coin.coinId();
+
+  let isFastForwardable =
+    bytesEqual(puzzle.modHash, Constants.singletonTopLayerV11Hash()) &&
+    coinSpend.coin.amount % 2n === 1n &&
+    !ctx.createdCoinIds.has(toHex(coinId)) &&
+    !ctx.assertedCoinIds.has(toHex(coinId));
+
+  if (isFastForwardable) {
+    let hasIdenticalOutput = false;
+
+    for (const condition of conditions.slice(2)) {
+      const disqualifyingCondition =
+        condition.parseAssertMyCoinId() ??
+        condition.parseAssertMyParentId() ??
+        condition.parseAssertHeightRelative() ??
+        condition.parseAssertSecondsRelative() ??
+        condition.parseAssertBeforeHeightRelative() ??
+        condition.parseAssertBeforeSecondsRelative() ??
+        condition.parseAssertMyBirthHeight() ??
+        condition.parseAssertMyBirthSeconds() ??
+        condition.parseAssertEphemeral() ??
+        condition.parseAggSigPuzzle() ??
+        condition.parseAggSigParent() ??
+        condition.parseAggSigParentAmount() ??
+        condition.parseAggSigParentPuzzle() ??
+        condition.parseCreateCoinAnnouncement();
+
+      if (disqualifyingCondition) {
+        isFastForwardable = false;
+      }
+
+      const sendMessage = condition.parseSendMessage();
+      if (sendMessage) {
+        const sender = parseMessageFlags(sendMessage.mode, MessageSide.Sender);
+
+        if (sender.parent) {
+          isFastForwardable = false;
+        }
+      }
+
+      const receiveMessage = condition.parseReceiveMessage();
+      if (receiveMessage) {
+        const receiver = parseMessageFlags(
+          receiveMessage.mode,
+          MessageSide.Receiver,
+        );
+
+        if (receiver.parent) {
+          isFastForwardable = false;
+        }
+      }
+
+      const createCoin = condition.parseCreateCoin();
+      if (createCoin) {
+        if (
+          bytesEqual(createCoin.puzzleHash, coinSpend.coin.puzzleHash) &&
+          createCoin.amount === coinSpend.coin.amount
+        ) {
+          hasIdenticalOutput = true;
+        }
+      }
+    }
+
+    if (!hasIdenticalOutput) {
+      isFastForwardable = false;
+    }
+  }
+
   return {
     coin: parseCoin(coinSpend.coin),
     puzzleReveal: toHex(coinSpend.puzzleReveal),
     solution: toHex(coinSpend.solution),
     runtimeCost: output.cost.toString(),
     conditions: conditions.map((condition) =>
-      parseCondition(coinSpend.coin, condition, ctx),
+      parseCondition(coinSpend.coin, condition, ctx, isFastForwardable),
     ),
   };
 }
@@ -205,6 +282,7 @@ function parseCondition(
   coin: Coin,
   condition: Program,
   ctx: BundleContext,
+  isFastForwardable: boolean,
 ): ParsedCondition {
   let name = 'UNKNOWN';
   let type = ConditionType.Other;
@@ -305,14 +383,14 @@ function parseCondition(
     type = ConditionType.Announcement;
     name = 'CREATE_COIN_ANNOUNCEMENT';
 
-    args.message = {
-      value: `0x${toHex(createCoinAnnouncement.message)}`,
-      type: ConditionArgType.Copiable,
-    };
-
     args.coin_id = {
       value: `0x${toHex(coin.coinId())}`,
       type: ConditionArgType.CoinId,
+    };
+
+    args.message = {
+      value: `0x${toHex(createCoinAnnouncement.message)}`,
+      type: ConditionArgType.Copiable,
     };
 
     const announcementId = toHex(
@@ -341,13 +419,6 @@ function parseCondition(
 
     const announcementId = toHex(assertCoinAnnouncement.announcementId);
 
-    if (ctx.announcementMessages[announcementId]) {
-      args.message = {
-        value: `0x${toHex(ctx.announcementMessages[announcementId])}`,
-        type: ConditionArgType.Copiable,
-      };
-    }
-
     if (ctx.announcementCoinIds[announcementId]) {
       args.coin_id = {
         value: `0x${toHex(ctx.announcementCoinIds[announcementId])}`,
@@ -355,6 +426,13 @@ function parseCondition(
       };
     } else if (ctx.selfContained) {
       warning = 'Announcement does not exist';
+    }
+
+    if (ctx.announcementMessages[announcementId]) {
+      args.message = {
+        value: `0x${toHex(ctx.announcementMessages[announcementId])}`,
+        type: ConditionArgType.Copiable,
+      };
     }
 
     args.announcement_id = {
@@ -368,13 +446,13 @@ function parseCondition(
     type = ConditionType.Announcement;
     name = 'CREATE_PUZZLE_ANNOUNCEMENT';
 
-    args.message = {
-      value: `0x${toHex(createPuzzleAnnouncement.message)}`,
+    args.puzzle_hash = {
+      value: `0x${toHex(coin.puzzleHash)}`,
       type: ConditionArgType.Copiable,
     };
 
-    args.puzzle_hash = {
-      value: `0x${toHex(coin.puzzleHash)}`,
+    args.message = {
+      value: `0x${toHex(createPuzzleAnnouncement.message)}`,
       type: ConditionArgType.Copiable,
     };
 
@@ -407,13 +485,6 @@ function parseCondition(
 
     const announcementId = toHex(assertPuzzleAnnouncement.announcementId);
 
-    if (ctx.announcementMessages[announcementId]) {
-      args.message = {
-        value: `0x${toHex(ctx.announcementMessages[announcementId])}`,
-        type: ConditionArgType.Copiable,
-      };
-    }
-
     if (ctx.announcementPuzzleHashes[announcementId]) {
       args.puzzle_hash = {
         value: `0x${toHex(ctx.announcementPuzzleHashes[announcementId])}`,
@@ -421,6 +492,13 @@ function parseCondition(
       };
     } else if (ctx.selfContained) {
       warning = 'Announcement does not exist';
+    }
+
+    if (ctx.announcementMessages[announcementId]) {
+      args.message = {
+        value: `0x${toHex(ctx.announcementMessages[announcementId])}`,
+        type: ConditionArgType.Copiable,
+      };
     }
 
     args.announcement_id = {
@@ -532,7 +610,9 @@ function parseCondition(
     };
 
     if (!bytesEqual(coin.parentCoinInfo, assertMyParentId.parentId)) {
-      warning = 'Parent ID does not match';
+      warning = isFastForwardable
+        ? 'This spend will need to be fast forwarded'
+        : 'Parent ID does not match, and this spend cannot be fast forwarded';
     }
   }
 
