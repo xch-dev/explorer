@@ -20,7 +20,7 @@ import { useParams } from 'react-router-dom';
 
 export function Coin() {
   const { id } = useParams();
-  const { tokens } = useDexie();
+  const { getToken } = useDexie();
   const { fetchNft } = useMintGarden();
 
   const [coin, setCoin] = useState<CoinRecord | null>(null);
@@ -49,9 +49,9 @@ export function Coin() {
 
   const token = coin
     ? coin.type === 'cat'
-      ? tokens[coin.asset_id.replace('0x', '')]
+      ? getToken(coin.asset_id)
       : coin.type === 'reward'
-        ? tokens['xch']
+        ? getToken('xch')
         : null
     : null;
 

@@ -48,6 +48,18 @@ export function parseLayer(puzzle: Puzzle): ParsedLayer {
       value: publicKey && `0x${toHex(publicKey)}`,
       type: ArgType.Copiable,
     };
+  } else if (bytesEqual(puzzle.modHash, Constants.catPuzzleHash())) {
+    name = 'CAT_V2';
+
+    const assetId = arg(1)?.toAtom();
+    const innerPuzzle = arg(2);
+
+    args.asset_id = {
+      value: assetId && `0x${toHex(assetId)}`,
+      type: ArgType.Copiable,
+    };
+
+    if (innerPuzzle) children.inner_puzzle = parseLayer(innerPuzzle.puzzle());
   } else if (bytesEqual(puzzle.puzzleHash, Constants.settlementPaymentHash())) {
     name = 'SETTLEMENT_PAYMENT';
   } else if (bytesEqual(puzzle.puzzleHash, Constants.singletonLauncherHash())) {

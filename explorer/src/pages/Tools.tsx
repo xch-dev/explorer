@@ -2,10 +2,13 @@ import { DropdownSelector } from '@/components/DropdownSelector';
 import { Layout } from '@/components/Layout';
 import { Truncated } from '@/components/Truncated';
 import { Textarea } from '@/components/ui/textarea';
+import { Nft } from '@/contexts/MintGardenContext';
 import { useDexie } from '@/hooks/useDexie';
+import { useMintGarden } from '@/hooks/useMintGarden';
 import { Precision, toDecimal } from '@/lib/conversions';
 import { parseJson } from '@/lib/json';
 import {
+  AssetType,
   ConditionType,
   ParsedCoinSpend,
   ParsedCondition,
@@ -22,7 +25,7 @@ import {
   SpendBundle,
 } from 'chia-wallet-sdk-wasm';
 import { CoinsIcon, TriangleAlertIcon } from 'lucide-react';
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useLocalStorage } from 'usehooks-ts';
 
 export function Tools() {
@@ -79,7 +82,90 @@ function BundleViewer({ bundle }: BundleViewerProps) {
   const [selectedSpend, setSelectedSpend] = useState<ParsedCoinSpend | null>(
     bundle.coinSpends[0] ?? null,
   );
-  const { tokens } = useDexie();
+  const { getToken } = useDexie();
+  const { fetchNft } = useMintGarden();
+
+  const [nfts, setNfts] = useState<Record<string, Nft | null>>({});
+
+  useEffect(() => {
+    // Fetch NFT data for all NFT spends
+    bundle.coinSpends.forEach((spend) => {
+      if (spend.assetType === AssetType.Nft) {
+        const launcherId = spend.assetId;
+        if (!nfts[launcherId]) {
+          fetchNft(launcherId).then((nft) => {
+            setNfts((prev) => ({ ...prev, [launcherId]: nft }));
+          });
+        }
+      }
+    });
+  }, [bundle.coinSpends, fetchNft, nfts]);
+
+  const renderCoinInfo = (spend: ParsedCoinSpend) => {
+    const nft = spend.assetType === AssetType.Nft ? nfts[spend.assetId] : null;
+    const token =
+      spend.assetType === AssetType.Token ? getToken(spend.assetId) : null;
+
+    console.log(nft);
+
+    return (
+      <div className='flex items-center gap-2 w-full'>
+        {nft ? (
+          <img
+            src={nft.data?.thumbnail_uri}
+            alt={nft.data?.metadata_json?.name ?? 'Unnamed'}
+            className='w-6 h-6 rounded flex-shrink-0 object-cover'
+          />
+        ) : token?.icon ? (
+          <img
+            src={token.icon}
+            alt={token.name}
+            className='w-6 h-6 rounded-full flex-shrink-0'
+          />
+        ) : (
+          <div className='w-6 h-6 rounded-full bg-primary/10 flex items-center justify-center flex-shrink-0'>
+            <CoinsIcon className='w-3.5 h-3.5 text-primary' />
+          </div>
+        )}
+        <div className='flex flex-col min-w-0'>
+          <div className='font-medium flex flex-wrap items-center gap-1.5'>
+            {nft ? (
+              <span className='break-all'>
+                {nft.data?.metadata_json?.name ?? 'Unnamed'}
+              </span>
+            ) : (
+              <>
+                <span className='break-all'>
+                  {toDecimal(
+                    spend.coin.amount,
+                    spend.assetType === AssetType.Token
+                      ? spend.assetId === 'xch'
+                        ? Precision.Xch
+                        : Precision.Cat
+                      : Precision.Singleton,
+                  )}
+                </span>
+                <span className='text-muted-foreground font-normal'>
+                  {spend.assetType === AssetType.Token
+                    ? token?.code || (spend.assetId === 'xch' ? 'XCH' : 'CAT')
+                    : spend.assetType === AssetType.Nft
+                      ? 'NFT'
+                      : spend.assetType === AssetType.Did
+                        ? 'DID'
+                        : spend.assetType === AssetType.Singleton
+                          ? 'VAULT'
+                          : ''}
+                </span>
+              </>
+            )}
+          </div>
+          <div className='font-mono text-xs text-muted-foreground truncate'>
+            <Truncated value={spend.coin.coinId} disableCopy />
+          </div>
+        </div>
+      </div>
+    );
+  };
 
   return (
     <div className='flex flex-col gap-4 mt-4'>
@@ -108,64 +194,12 @@ function BundleViewer({ bundle }: BundleViewerProps) {
           <DropdownSelector
             loadedItems={bundle.coinSpends}
             onSelect={setSelectedSpend}
-            renderItem={(spend) => (
-              <div className='flex items-center gap-2 w-full'>
-                {tokens?.xch?.icon ? (
-                  <img
-                    src={tokens.xch.icon}
-                    alt='XCH'
-                    className='w-6 h-6 rounded-full flex-shrink-0'
-                  />
-                ) : (
-                  <div className='w-6 h-6 rounded-full bg-primary/10 flex items-center justify-center flex-shrink-0'>
-                    <CoinsIcon className='w-3.5 h-3.5 text-primary' />
-                  </div>
-                )}
-                <div className='flex flex-col min-w-0'>
-                  <div className='font-medium flex flex-wrap items-center gap-1.5'>
-                    <span className='break-all'>
-                      {toDecimal(spend.coin.amount, Precision.Xch)}
-                    </span>
-                    <span className='text-muted-foreground font-normal'>
-                      XCH
-                    </span>
-                  </div>
-                  <div className='font-mono text-xs text-muted-foreground truncate'>
-                    <Truncated value={spend.coin.coinId} disableCopy />
-                  </div>
-                </div>
-              </div>
-            )}
+            renderItem={(spend) => renderCoinInfo(spend)}
             width='w-[350px]'
             className='rounded-b-none'
           >
             {selectedSpend ? (
-              <div className='flex items-center gap-2 min-w-0'>
-                {tokens?.xch?.icon ? (
-                  <img
-                    src={tokens.xch.icon}
-                    alt='XCH'
-                    className='w-6 h-6 rounded-full flex-shrink-0'
-                  />
-                ) : (
-                  <div className='w-6 h-6 rounded-full bg-primary/10 flex items-center justify-center flex-shrink-0'>
-                    <CoinsIcon className='w-3.5 h-3.5 text-primary' />
-                  </div>
-                )}
-                <div className='flex flex-col min-w-0'>
-                  <div className='font-medium flex flex-wrap items-center gap-1.5'>
-                    <span className='break-all'>
-                      {toDecimal(selectedSpend.coin.amount, Precision.Xch)}
-                    </span>
-                    <span className='text-muted-foreground font-normal'>
-                      XCH
-                    </span>
-                  </div>
-                  <div className='font-mono text-xs text-muted-foreground truncate'>
-                    <Truncated value={selectedSpend.coin.coinId} disableCopy />
-                  </div>
-                </div>
-              </div>
+              renderCoinInfo(selectedSpend)
             ) : (
               <div className='text-muted-foreground'>
                 Select a spend to view
@@ -225,6 +259,10 @@ function SpendViewer({ spend }: SpendViewerProps) {
           <div className='flex flex-col'>
             <div className='text-muted-foreground'>Cost</div>
             <div>{spend.cost}</div>
+          </div>
+          <div className='flex flex-col'>
+            <div className='text-muted-foreground'>Asset ID</div>
+            <Truncated value={spend.assetId} />
           </div>
         </div>
       </div>

@@ -1,4 +1,5 @@
-import { bytesEqual, Constants, toHex } from 'chia-wallet-sdk-wasm';
+import { bytesEqual, Constants, Puzzle, toHex } from 'chia-wallet-sdk-wasm';
+import { toAddress } from '../conversions';
 import { parseCoin, ParsedCoin } from './coin';
 import { parseCondition, ParsedCondition } from './conditions';
 import { ParserContext } from './context';
@@ -13,6 +14,15 @@ export interface ParsedCoinSpend {
   cost: string;
   conditions: ParsedCondition[];
   layer: ParsedLayer;
+  assetType: AssetType;
+  assetId: string;
+}
+
+export enum AssetType {
+  Token,
+  Nft,
+  Did,
+  Singleton,
 }
 
 export function parseCoinSpend(
@@ -88,6 +98,11 @@ export function parseCoinSpend(
     }
   }
 
+  const cat = puzzle.parseCat();
+  const nft = puzzle.parseNft();
+  const did = puzzle.parseDid();
+  const singleton = parseSingleton(puzzle);
+
   return {
     coin: parseCoin(coinSpend.coin),
     puzzleReveal: toHex(coinSpend.puzzleReveal),
@@ -97,5 +112,33 @@ export function parseCoinSpend(
       parseCondition(coinSpend.coin, condition, ctx, isFastForwardable),
     ),
     layer: parseLayer(puzzle),
+    assetId: cat
+      ? `0x${toHex(cat.info.assetId)}`
+      : nft
+        ? toAddress(toHex(nft.info.launcherId), 'nft')
+        : did
+          ? toAddress(toHex(did.info.launcherId), 'did:chia:')
+          : singleton
+            ? toAddress(toHex(singleton), 'vault')
+            : 'xch',
+    assetType: nft
+      ? AssetType.Nft
+      : did
+        ? AssetType.Did
+        : singleton
+          ? AssetType.Singleton
+          : AssetType.Token,
   };
+}
+
+function parseSingleton(puzzle: Puzzle) {
+  if (!bytesEqual(puzzle.modHash, Constants.singletonTopLayerV11Hash())) {
+    return undefined;
+  }
+
+  const singletonStruct = puzzle.program.uncurry()?.args[0];
+  const pair = singletonStruct?.toPair()?.rest.toPair();
+  const launcherId = pair?.first.toAtom();
+
+  return launcherId;
 }

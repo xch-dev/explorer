@@ -196,7 +196,7 @@ interface CoinCardProps {
 }
 
 function CoinCard({ coinRecord, block }: CoinCardProps) {
-  const { tokens } = useDexie();
+  const { getToken } = useDexie();
   const { fetchNft } = useMintGarden();
   const [nft, setNft] = useState<Nft | null>(null);
   const isCreated = coinRecord.created_height === block?.height;
@@ -210,9 +210,9 @@ function CoinCard({ coinRecord, block }: CoinCardProps) {
 
   const token =
     coinRecord.type === 'cat' && 'asset_id' in coinRecord
-      ? tokens[coinRecord.asset_id.replace('0x', '')]
+      ? getToken(coinRecord.asset_id)
       : coinRecord.type === 'unknown' || coinRecord.type === 'reward'
-        ? tokens['xch']
+        ? getToken('xch')
         : null;
 
   return (

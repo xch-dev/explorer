@@ -9,7 +9,7 @@ export interface Token {
 }
 
 export interface DexieContextType {
-  tokens: Record<string, Token>;
+  getToken: (id: string) => Token | null;
 }
 
 // eslint-disable-next-line react-refresh/only-export-components
@@ -42,7 +42,11 @@ export function DexieProvider({ children }: { children: ReactNode }) {
       });
   }, []);
 
+  const getToken = (id: string) => tokens[id.replace('0x', '')] ?? null;
+
   return (
-    <DexieContext.Provider value={{ tokens }}>{children}</DexieContext.Provider>
+    <DexieContext.Provider value={{ getToken }}>
+      {children}
+    </DexieContext.Provider>
   );
 }

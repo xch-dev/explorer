@@ -14,7 +14,7 @@ export interface Nft {
 }
 
 export interface MintGardenContextType {
-  fetchNft: (launcherId: string) => Promise<Nft>;
+  fetchNft: (launcherId: string) => Promise<Nft | null>;
 }
 
 // eslint-disable-next-line react-refresh/only-export-components
@@ -31,13 +31,23 @@ export function MintGardenProvider({ children }: { children: ReactNode }) {
         return nfts[launcherId];
       }
 
-      const bech32 = toAddress(launcherId, 'nft');
-      const response = await fetch(`https://api.mintgarden.io/nfts/${bech32}`);
-      const nft: Nft = await response.json();
+      try {
+        const bech32 = launcherId.startsWith('nft')
+          ? launcherId
+          : toAddress(launcherId, 'nft');
+        const response = await fetch(
+          `https://api.mintgarden.io/nfts/${bech32}`,
+        );
+        const nft: Nft = await response.json();
 
-      setNfts((prev) => ({ ...prev, [launcherId]: nft }));
+        setNfts((prev) => ({ ...prev, [launcherId]: nft }));
 
-      return nft;
+        return nft;
+      } catch (error) {
+        console.error(error);
+
+        return null;
+      }
     },
     [nfts, setNfts],
   );
