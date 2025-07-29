@@ -4,13 +4,13 @@ import {
   Coin,
   CoinSpend,
   Constants,
-  Output,
   Program,
   Puzzle,
   sha256,
   SpendBundle,
   toHex,
 } from 'chia-wallet-sdk-wasm';
+import { COST_PER_BYTE } from './constants';
 
 export interface ParsedSpendBundle {
   coinSpends: ParsedCoinSpend[];
@@ -22,7 +22,7 @@ export interface ParsedCoinSpend {
   coin: ParsedCoin;
   puzzleReveal: string;
   solution: string;
-  runtimeCost: string;
+  cost: string;
   conditions: ParsedCondition[];
 }
 
@@ -79,8 +79,8 @@ interface DeserializedCoinSpend {
   coinSpend: CoinSpend;
   puzzle: Puzzle;
   solution: Program;
-  output: Output;
   conditions: Program[];
+  cost: bigint;
 }
 
 export function parseSpendBundle(
@@ -115,6 +115,11 @@ export function parseSpendBundle(
 
     announcements.spentCoinIds.add(toHex(coinId));
     announcements.spentPuzzleHashes.add(toHex(puzzleHash));
+
+    let cost =
+      output.cost +
+      COST_PER_BYTE *
+        BigInt(coinSpend.puzzleReveal.length + coinSpend.solution.length);
 
     for (const condition of conditions) {
       const createCoinAnnouncement = condition.parseCreateCoinAnnouncement();
@@ -159,11 +164,26 @@ export function parseSpendBundle(
             new Coin(coinId, createCoin.puzzleHash, createCoin.amount).coinId(),
           ),
         );
+        cost += 1_800_000n;
       }
 
       const assertConcurrentSpend = condition.parseAssertConcurrentSpend();
       if (assertConcurrentSpend) {
         announcements.assertedCoinIds.add(toHex(assertConcurrentSpend.coinId));
+      }
+
+      const aggSig =
+        condition.parseAggSigParent() ??
+        condition.parseAggSigPuzzle() ??
+        condition.parseAggSigAmount() ??
+        condition.parseAggSigPuzzleAmount() ??
+        condition.parseAggSigParentAmount() ??
+        condition.parseAggSigParentPuzzle() ??
+        condition.parseAggSigUnsafe() ??
+        condition.parseAggSigMe();
+
+      if (aggSig) {
+        cost += 1_200_000n;
       }
     }
 
@@ -171,8 +191,8 @@ export function parseSpendBundle(
       coinSpend,
       puzzle,
       solution,
-      output,
       conditions,
+      cost,
     });
   }
 
@@ -186,7 +206,7 @@ export function parseSpendBundle(
 }
 
 function parseCoinSpend(
-  { coinSpend, output, puzzle, conditions }: DeserializedCoinSpend,
+  { coinSpend, cost, puzzle, conditions }: DeserializedCoinSpend,
   ctx: BundleContext,
 ): ParsedCoinSpend {
   const coinId = coinSpend.coin.coinId();
@@ -262,7 +282,7 @@ function parseCoinSpend(
     coin: parseCoin(coinSpend.coin),
     puzzleReveal: toHex(coinSpend.puzzleReveal),
     solution: toHex(coinSpend.solution),
-    runtimeCost: output.cost.toString(),
+    cost: cost.toLocaleString(),
     conditions: conditions.map((condition) =>
       parseCondition(coinSpend.coin, condition, ctx, isFastForwardable),
     ),

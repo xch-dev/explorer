@@ -127,8 +127,8 @@ function SpendViewer({ spend }: SpendViewerProps) {
             <Truncated value={spend.solution} />
           </div>
           <div className='flex flex-col'>
-            <div className='text-muted-foreground'>Runtime Cost</div>
-            <div>{spend.runtimeCost}</div>
+            <div className='text-muted-foreground'>Total Cost</div>
+            <div>{spend.cost}</div>
           </div>
         </div>
       </div>
