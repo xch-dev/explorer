@@ -1,6 +1,9 @@
+import { DropdownSelector } from '@/components/DropdownSelector';
 import { Layout } from '@/components/Layout';
 import { Truncated } from '@/components/Truncated';
 import { Textarea } from '@/components/ui/textarea';
+import { useDexie } from '@/hooks/useDexie';
+import { Precision, toDecimal } from '@/lib/conversions';
 import { parseJson } from '@/lib/json';
 import {
   ConditionArgType,
@@ -17,8 +20,8 @@ import {
   Signature,
   SpendBundle,
 } from 'chia-wallet-sdk-wasm';
-import { TriangleAlertIcon } from 'lucide-react';
-import { useMemo } from 'react';
+import { CoinsIcon, TriangleAlertIcon } from 'lucide-react';
+import { useMemo, useState } from 'react';
 import { useLocalStorage } from 'usehooks-ts';
 
 export function Tools() {
@@ -72,11 +75,111 @@ interface BundleViewerProps {
 }
 
 function BundleViewer({ bundle }: BundleViewerProps) {
+  const [selectedSpend, setSelectedSpend] = useState<ParsedCoinSpend | null>(
+    bundle.coinSpends[0] ?? null,
+  );
+  const { tokens } = useDexie();
+
+  const totalCost = useMemo(() => {
+    return bundle.coinSpends.reduce((acc, spend) => {
+      const cost = typeof spend.cost === 'number' ? spend.cost : 0;
+      return acc + cost;
+    }, 0);
+  }, [bundle.coinSpends]);
+
   return (
-    <div className='flex flex-col gap-2 mt-4'>
-      {bundle.coinSpends.map((spend) => (
-        <SpendViewer key={spend.coin.coinId} spend={spend} />
-      ))}
+    <div className='flex flex-col gap-4 mt-4'>
+      <div className='p-4 rounded-md bg-card'>
+        <div className='text-lg font-medium mb-2'>Bundle Information</div>
+        <div className='grid grid-cols-2 gap-4 text-sm'>
+          <div>
+            <div className='text-muted-foreground'>Total Cost</div>
+            <div>{totalCost}</div>
+          </div>
+          <div>
+            <div className='text-muted-foreground'>Total Spends</div>
+            <div>{bundle.coinSpends.length}</div>
+          </div>
+          <div className='col-span-2'>
+            <div className='text-muted-foreground'>Bundle Hash</div>
+            <div className='truncate'>0x1234567890abcdef</div>
+          </div>
+        </div>
+      </div>
+
+      <div className='flex flex-col'>
+        <div className='flex items-center gap-2'>
+          <DropdownSelector
+            loadedItems={bundle.coinSpends}
+            onSelect={setSelectedSpend}
+            renderItem={(spend) => (
+              <div className='flex items-center gap-2 w-full'>
+                {tokens?.xch?.icon ? (
+                  <img
+                    src={tokens.xch.icon}
+                    alt='XCH'
+                    className='w-6 h-6 rounded-full flex-shrink-0'
+                  />
+                ) : (
+                  <div className='w-6 h-6 rounded-full bg-primary/10 flex items-center justify-center flex-shrink-0'>
+                    <CoinsIcon className='w-3.5 h-3.5 text-primary' />
+                  </div>
+                )}
+                <div className='flex flex-col min-w-0'>
+                  <div className='font-medium flex flex-wrap items-center gap-1.5'>
+                    <span className='break-all'>
+                      {toDecimal(spend.coin.amount, Precision.Xch)}
+                    </span>
+                    <span className='text-muted-foreground font-normal'>
+                      XCH
+                    </span>
+                  </div>
+                  <div className='font-mono text-xs text-muted-foreground truncate'>
+                    <Truncated value={spend.coin.coinId} disableCopy />
+                  </div>
+                </div>
+              </div>
+            )}
+            width='w-[350px]'
+            className='rounded-b-none'
+          >
+            {selectedSpend ? (
+              <div className='flex items-center gap-2 min-w-0'>
+                {tokens?.xch?.icon ? (
+                  <img
+                    src={tokens.xch.icon}
+                    alt='XCH'
+                    className='w-6 h-6 rounded-full flex-shrink-0'
+                  />
+                ) : (
+                  <div className='w-6 h-6 rounded-full bg-primary/10 flex items-center justify-center flex-shrink-0'>
+                    <CoinsIcon className='w-3.5 h-3.5 text-primary' />
+                  </div>
+                )}
+                <div className='flex flex-col min-w-0'>
+                  <div className='font-medium flex flex-wrap items-center gap-1.5'>
+                    <span className='break-all'>
+                      {toDecimal(selectedSpend.coin.amount, Precision.Xch)}
+                    </span>
+                    <span className='text-muted-foreground font-normal'>
+                      XCH
+                    </span>
+                  </div>
+                  <div className='font-mono text-xs text-muted-foreground truncate'>
+                    <Truncated value={selectedSpend.coin.coinId} disableCopy />
+                  </div>
+                </div>
+              </div>
+            ) : (
+              <div className='text-muted-foreground'>
+                Select a spend to view
+              </div>
+            )}
+          </DropdownSelector>
+        </div>
+
+        {selectedSpend && <SpendViewer spend={selectedSpend} />}
+      </div>
     </div>
   );
 }
@@ -87,7 +190,7 @@ interface SpendViewerProps {
 
 function SpendViewer({ spend }: SpendViewerProps) {
   return (
-    <div className='flex flex-col gap-3 p-3 rounded-md bg-card'>
+    <div className='flex flex-col gap-3 p-3 rounded-t-none rounded-md bg-card border border-t-0 border-input'>
       <div className='grid grid-cols-1 md:grid-cols-2 gap-3'>
         <div className='flex flex-col gap-1 p-2 rounded-md bg-accent text-sm'>
           <div className='flex flex-col'>
@@ -124,7 +227,7 @@ function SpendViewer({ spend }: SpendViewerProps) {
             <Truncated value={spend.solution} />
           </div>
           <div className='flex flex-col'>
-            <div className='text-muted-foreground'>Total Cost</div>
+            <div className='text-muted-foreground'>Cost</div>
             <div>{spend.cost}</div>
           </div>
         </div>
