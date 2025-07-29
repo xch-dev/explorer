@@ -3,6 +3,7 @@ import { parseCoin, ParsedCoin } from './coin';
 import { parseCondition, ParsedCondition } from './conditions';
 import { ParserContext } from './context';
 import { DeserializedCoinSpend } from './deserializedCoinSpend';
+import { ParsedLayer, parseLayer } from './layers';
 import { MessageSide, parseMessageFlags } from './messages';
 
 export interface ParsedCoinSpend {
@@ -11,6 +12,7 @@ export interface ParsedCoinSpend {
   solution: string;
   cost: string;
   conditions: ParsedCondition[];
+  layer: ParsedLayer;
 }
 
 export function parseCoinSpend(
@@ -94,5 +96,6 @@ export function parseCoinSpend(
     conditions: conditions.map((condition) =>
       parseCondition(coinSpend.coin, condition, ctx, isFastForwardable),
     ),
+    layer: parseLayer(puzzle),
   };
 }

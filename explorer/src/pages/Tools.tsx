@@ -6,13 +6,14 @@ import { useDexie } from '@/hooks/useDexie';
 import { Precision, toDecimal } from '@/lib/conversions';
 import { parseJson } from '@/lib/json';
 import {
-  ConditionArgType,
   ConditionType,
   ParsedCoinSpend,
   ParsedCondition,
+  ParsedLayer,
   ParsedSpendBundle,
   parseSpendBundle,
 } from '@/lib/parser';
+import { ArgType } from '@/lib/parser/arg';
 import {
   Coin,
   CoinSpend,
@@ -228,6 +229,11 @@ function SpendViewer({ spend }: SpendViewerProps) {
         </div>
       </div>
 
+      <div className='flex flex-col gap-2'>
+        <div className='text-sm text-muted-foreground'>Puzzle Layers</div>
+        <LayerViewer layer={spend.layer} />
+      </div>
+
       {spend.conditions.length > 0 && (
         <div className='flex flex-col gap-2'>
           <div className='text-sm text-muted-foreground'>Output Conditions</div>
@@ -235,6 +241,73 @@ function SpendViewer({ spend }: SpendViewerProps) {
             // eslint-disable-next-line react/no-array-index-key -- immutable
             <ConditionViewer key={index} condition={condition} />
           ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+interface LayerViewerProps {
+  layer: ParsedLayer;
+  depth?: number;
+  label?: string;
+}
+
+function LayerViewer({ layer, depth = 0, label }: LayerViewerProps) {
+  const getBorderColor = () => {
+    return 'border-l-orange-500';
+  };
+
+  return (
+    <div style={{ marginLeft: `${depth > 0 ? 0.5 : 0}rem` }}>
+      {label && (
+        <div className='break-all text-xs text-muted-foreground mb-1'>
+          {label}:
+        </div>
+      )}
+
+      <div
+        className={`p-1.5 rounded-md text-sm border-l-4 ${getBorderColor()} bg-accent`}
+      >
+        <div className='flex flex-col gap-1 mb-1'>
+          <div className='font-medium break-all'>{layer.name}</div>
+        </div>
+        <div className='space-y-1 text-xs'>
+          {Object.entries(layer.args).map(([key, value]) => (
+            <div
+              key={key}
+              className='flex flex-col sm:flex-row sm:items-start gap-1 sm:gap-2'
+            >
+              <div className='text-muted-foreground sm:min-w-24'>{key}:</div>
+              <div className='flex-1 break-all'>
+                {(value.type === ArgType.Copiable ||
+                  value.type === ArgType.CoinId) &&
+                value.value ? (
+                  <Truncated
+                    value={value.value}
+                    href={
+                      value.type === ArgType.CoinId
+                        ? `/coin/${value.value}`
+                        : undefined
+                    }
+                  />
+                ) : (
+                  <div>{value.value}</div>
+                )}
+              </div>
+            </div>
+          ))}
+        </div>
+      </div>
+      {Object.keys(layer.children).length > 0 && (
+        <div className='mt-1'>
+          <div className='space-y-2'>
+            {Object.entries(layer.children).map(([key, child]) => (
+              <div key={key}>
+                <LayerViewer layer={child} depth={depth + 1} label={key} />
+              </div>
+            ))}
+          </div>
         </div>
       )}
     </div>
@@ -276,7 +349,7 @@ function ConditionViewer({ condition }: ConditionViewerProps) {
         </div>
       </div>
       {condition.warning !== null && (
-        <div className='text-sm text-yellow-500 mb-1 flex items-center gap-1'>
+        <div className='text-sm text-yellow-600 dark:text-yellow-500 mb-1 flex items-center gap-1'>
           <TriangleAlertIcon className='w-4 h-4' /> {condition.warning}
         </div>
       )}
@@ -288,12 +361,12 @@ function ConditionViewer({ condition }: ConditionViewerProps) {
           >
             <div className='text-muted-foreground sm:min-w-24'>{key}:</div>
             <div className='flex-1 break-all'>
-              {value.type === ConditionArgType.Copiable ||
-              value.type === ConditionArgType.CoinId ? (
+              {value.type === ArgType.Copiable ||
+              value.type === ArgType.CoinId ? (
                 <Truncated
                   value={value.value}
                   href={
-                    value.type === ConditionArgType.CoinId
+                    value.type === ArgType.CoinId
                       ? `/coin/${value.value}`
                       : undefined
                   }

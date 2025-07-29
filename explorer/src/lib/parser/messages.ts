@@ -1,6 +1,7 @@
 import { Coin, Program, toHex } from 'chia-wallet-sdk-wasm';
 
-import { ConditionArg, ConditionArgType } from './conditions';
+import { ArgType } from './arg';
+import { ConditionArg } from './conditions';
 
 export enum MessageSide {
   Sender,
@@ -54,11 +55,11 @@ export function insertMessageModeData(
       args[`${prefix}_coin_id`] = coinId
         ? {
             value: `0x${toHex(coinId)}`,
-            type: ConditionArgType.CoinId,
+            type: ArgType.CoinId,
           }
         : {
             value: 'Missing',
-            type: ConditionArgType.NonCopiable,
+            type: ArgType.NonCopiable,
           };
     } else {
       if (flags.parent && flags.puzzle) {
@@ -67,20 +68,20 @@ export function insertMessageModeData(
         args[`${prefix}_parent_coin_id`] = parentCoinId
           ? {
               value: `0x${toHex(parentCoinId)}`,
-              type: ConditionArgType.CoinId,
+              type: ArgType.CoinId,
             }
           : {
               value: 'Missing',
-              type: ConditionArgType.NonCopiable,
+              type: ArgType.NonCopiable,
             };
         args[`${prefix}_puzzle_hash`] = puzzleHash
           ? {
               value: `0x${toHex(puzzleHash)}`,
-              type: ConditionArgType.Copiable,
+              type: ArgType.Copiable,
             }
           : {
               value: 'Missing',
-              type: ConditionArgType.NonCopiable,
+              type: ArgType.NonCopiable,
             };
       } else if (flags.parent && flags.amount) {
         const parentCoinId = data[0]?.toAtom();
@@ -88,20 +89,20 @@ export function insertMessageModeData(
         args[`${prefix}_parent_coin_id`] = parentCoinId
           ? {
               value: `0x${toHex(parentCoinId)}`,
-              type: ConditionArgType.CoinId,
+              type: ArgType.CoinId,
             }
           : {
               value: 'Missing',
-              type: ConditionArgType.NonCopiable,
+              type: ArgType.NonCopiable,
             };
         args[`${prefix}_amount`] = amount
           ? {
               value: amount.toString(),
-              type: ConditionArgType.NonCopiable,
+              type: ArgType.NonCopiable,
             }
           : {
               value: 'Missing',
-              type: ConditionArgType.NonCopiable,
+              type: ArgType.NonCopiable,
             };
       } else if (flags.puzzle && flags.amount) {
         const puzzleHash = data[0]?.toAtom();
@@ -109,53 +110,53 @@ export function insertMessageModeData(
         args[`${prefix}_puzzle_hash`] = puzzleHash
           ? {
               value: `0x${toHex(puzzleHash)}`,
-              type: ConditionArgType.Copiable,
+              type: ArgType.Copiable,
             }
           : {
               value: 'Missing',
-              type: ConditionArgType.NonCopiable,
+              type: ArgType.NonCopiable,
             };
         args[`${prefix}_amount`] = amount
           ? {
               value: amount.toString(),
-              type: ConditionArgType.NonCopiable,
+              type: ArgType.NonCopiable,
             }
           : {
               value: 'Missing',
-              type: ConditionArgType.NonCopiable,
+              type: ArgType.NonCopiable,
             };
       } else if (flags.parent) {
         const parentCoinId = data[0]?.toAtom();
         args[`${prefix}_parent_coin_id`] = parentCoinId
           ? {
               value: `0x${toHex(parentCoinId)}`,
-              type: ConditionArgType.CoinId,
+              type: ArgType.CoinId,
             }
           : {
               value: 'Missing',
-              type: ConditionArgType.NonCopiable,
+              type: ArgType.NonCopiable,
             };
       } else if (flags.puzzle) {
         const puzzleHash = data[0]?.toAtom();
         args[`${prefix}_puzzle_hash`] = puzzleHash
           ? {
               value: `0x${toHex(puzzleHash)}`,
-              type: ConditionArgType.Copiable,
+              type: ArgType.Copiable,
             }
           : {
               value: 'Missing',
-              type: ConditionArgType.NonCopiable,
+              type: ArgType.NonCopiable,
             };
       } else if (flags.amount) {
         const amount = data[0]?.toInt();
         args[`${prefix}_amount`] = amount
           ? {
               value: amount.toString(),
-              type: ConditionArgType.NonCopiable,
+              type: ArgType.NonCopiable,
             }
           : {
               value: 'Missing',
-              type: ConditionArgType.NonCopiable,
+              type: ArgType.NonCopiable,
             };
       }
     }
@@ -166,25 +167,25 @@ export function insertMessageModeData(
   if (flags.parent && flags.puzzle && flags.amount) {
     args[`${prefix}_coin_id`] = {
       value: `0x${toHex(data.coinId())}`,
-      type: ConditionArgType.CoinId,
+      type: ArgType.CoinId,
     };
   } else {
     if (flags.parent) {
       args[`${prefix}_parent_coin_id`] = {
         value: `0x${toHex(data.parentCoinInfo)}`,
-        type: ConditionArgType.CoinId,
+        type: ArgType.CoinId,
       };
     }
     if (flags.puzzle) {
       args[`${prefix}_puzzle_hash`] = {
         value: `0x${toHex(data.puzzleHash)}`,
-        type: ConditionArgType.Copiable,
+        type: ArgType.Copiable,
       };
     }
     if (flags.amount) {
       args[`${prefix}_amount`] = {
         value: data.amount.toString(),
-        type: ConditionArgType.NonCopiable,
+        type: ArgType.NonCopiable,
       };
     }
   }

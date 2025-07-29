@@ -1,4 +1,5 @@
 import { bytesEqual, Coin, Program, sha256, toHex } from 'chia-wallet-sdk-wasm';
+import { ArgType } from './arg';
 import { ParserContext } from './context';
 import {
   insertMessageModeData,
@@ -26,13 +27,7 @@ export enum ConditionType {
 
 export interface ConditionArg {
   value: string;
-  type: ConditionArgType;
-}
-
-export enum ConditionArgType {
-  CoinId,
-  Copiable,
-  NonCopiable,
+  type: ArgType;
 }
 
 export function parseCondition(
@@ -52,7 +47,7 @@ export function parseCondition(
     name = 'REMARK';
     args.rest = {
       value: remark.rest.unparse(),
-      type: ConditionArgType.NonCopiable,
+      type: ArgType.NonCopiable,
     };
   }
 
@@ -88,11 +83,11 @@ export function parseCondition(
 
     args.public_key = {
       value: `0x${toHex(aggSig.publicKey.toBytes())}`,
-      type: ConditionArgType.Copiable,
+      type: ArgType.Copiable,
     };
     args.message = {
       value: `0x${toHex(aggSig.message)}`,
-      type: ConditionArgType.Copiable,
+      type: ArgType.Copiable,
     };
   }
 
@@ -103,23 +98,23 @@ export function parseCondition(
 
     args.coin_id = {
       value: `0x${toHex(new Coin(coin.coinId(), createCoin.puzzleHash, createCoin.amount).coinId())}`,
-      type: ConditionArgType.CoinId,
+      type: ArgType.CoinId,
     };
 
     args.puzzle_hash = {
       value: `0x${toHex(createCoin.puzzleHash)}`,
-      type: ConditionArgType.Copiable,
+      type: ArgType.Copiable,
     };
 
     args.amount = {
       value: createCoin.amount.toString(),
-      type: ConditionArgType.NonCopiable,
+      type: ArgType.NonCopiable,
     };
 
     if (createCoin.memos) {
       args.memos = {
         value: createCoin.memos.unparse(),
-        type: ConditionArgType.NonCopiable,
+        type: ArgType.NonCopiable,
       };
     }
   }
@@ -131,7 +126,7 @@ export function parseCondition(
 
     args.amount = {
       value: reserveFee.amount.toString(),
-      type: ConditionArgType.NonCopiable,
+      type: ArgType.NonCopiable,
     };
   }
 
@@ -142,12 +137,12 @@ export function parseCondition(
 
     args.coin_id = {
       value: `0x${toHex(coin.coinId())}`,
-      type: ConditionArgType.CoinId,
+      type: ArgType.CoinId,
     };
 
     args.message = {
       value: `0x${toHex(createCoinAnnouncement.message)}`,
-      type: ConditionArgType.Copiable,
+      type: ArgType.Copiable,
     };
 
     const announcementId = toHex(
@@ -158,7 +153,7 @@ export function parseCondition(
 
     args.announcement_id = {
       value: `0x${announcementId}`,
-      type: ConditionArgType.Copiable,
+      type: ArgType.Copiable,
     };
 
     if (
@@ -179,7 +174,7 @@ export function parseCondition(
     if (ctx.announcementCoinIds[announcementId]) {
       args.coin_id = {
         value: `0x${toHex(ctx.announcementCoinIds[announcementId])}`,
-        type: ConditionArgType.CoinId,
+        type: ArgType.CoinId,
       };
     } else if (ctx.selfContained) {
       warning = 'Announcement does not exist';
@@ -188,13 +183,13 @@ export function parseCondition(
     if (ctx.announcementMessages[announcementId]) {
       args.message = {
         value: `0x${toHex(ctx.announcementMessages[announcementId])}`,
-        type: ConditionArgType.Copiable,
+        type: ArgType.Copiable,
       };
     }
 
     args.announcement_id = {
       value: `0x${announcementId}`,
-      type: ConditionArgType.Copiable,
+      type: ArgType.Copiable,
     };
   }
 
@@ -205,12 +200,12 @@ export function parseCondition(
 
     args.puzzle_hash = {
       value: `0x${toHex(coin.puzzleHash)}`,
-      type: ConditionArgType.Copiable,
+      type: ArgType.Copiable,
     };
 
     args.message = {
       value: `0x${toHex(createPuzzleAnnouncement.message)}`,
-      type: ConditionArgType.Copiable,
+      type: ArgType.Copiable,
     };
 
     const announcementId = toHex(
@@ -224,7 +219,7 @@ export function parseCondition(
 
     args.announcement_id = {
       value: `0x${announcementId}`,
-      type: ConditionArgType.Copiable,
+      type: ArgType.Copiable,
     };
 
     if (
@@ -245,7 +240,7 @@ export function parseCondition(
     if (ctx.announcementPuzzleHashes[announcementId]) {
       args.puzzle_hash = {
         value: `0x${toHex(ctx.announcementPuzzleHashes[announcementId])}`,
-        type: ConditionArgType.Copiable,
+        type: ArgType.Copiable,
       };
     } else if (ctx.selfContained) {
       warning = 'Announcement does not exist';
@@ -254,13 +249,13 @@ export function parseCondition(
     if (ctx.announcementMessages[announcementId]) {
       args.message = {
         value: `0x${toHex(ctx.announcementMessages[announcementId])}`,
-        type: ConditionArgType.Copiable,
+        type: ArgType.Copiable,
       };
     }
 
     args.announcement_id = {
       value: `0x${announcementId}`,
-      type: ConditionArgType.Copiable,
+      type: ArgType.Copiable,
     };
   }
 
@@ -271,7 +266,7 @@ export function parseCondition(
 
     args.coin_id = {
       value: `0x${toHex(assertConcurrentSpend.coinId)}`,
-      type: ConditionArgType.CoinId,
+      type: ArgType.CoinId,
     };
 
     if (
@@ -289,7 +284,7 @@ export function parseCondition(
 
     args.puzzle_hash = {
       value: `0x${toHex(assertConcurrentPuzzle.puzzleHash)}`,
-      type: ConditionArgType.Copiable,
+      type: ArgType.Copiable,
     };
 
     if (
@@ -307,11 +302,11 @@ export function parseCondition(
 
     args.mode = {
       value: sendMessage.mode.toString(),
-      type: ConditionArgType.NonCopiable,
+      type: ArgType.NonCopiable,
     };
     args.message = {
       value: `0x${toHex(sendMessage.message)}`,
-      type: ConditionArgType.Copiable,
+      type: ArgType.Copiable,
     };
 
     const sender = parseMessageFlags(sendMessage.mode, MessageSide.Sender);
@@ -328,11 +323,11 @@ export function parseCondition(
 
     args.mode = {
       value: receiveMessage.mode.toString(),
-      type: ConditionArgType.NonCopiable,
+      type: ArgType.NonCopiable,
     };
     args.message = {
       value: `0x${toHex(receiveMessage.message)}`,
-      type: ConditionArgType.Copiable,
+      type: ArgType.Copiable,
     };
 
     const sender = parseMessageFlags(receiveMessage.mode, MessageSide.Sender);
@@ -352,7 +347,7 @@ export function parseCondition(
 
     args.coin_id = {
       value: `0x${toHex(assertMyCoinId.coinId)}`,
-      type: ConditionArgType.CoinId,
+      type: ArgType.CoinId,
     };
   }
 
@@ -363,7 +358,7 @@ export function parseCondition(
 
     args.parent_id = {
       value: `0x${toHex(assertMyParentId.parentId)}`,
-      type: ConditionArgType.CoinId,
+      type: ArgType.CoinId,
     };
 
     if (!bytesEqual(coin.parentCoinInfo, assertMyParentId.parentId)) {
@@ -380,7 +375,7 @@ export function parseCondition(
 
     args.puzzle_hash = {
       value: `0x${toHex(assertMyPuzzleHash.puzzleHash)}`,
-      type: ConditionArgType.Copiable,
+      type: ArgType.Copiable,
     };
 
     if (!bytesEqual(coin.puzzleHash, assertMyPuzzleHash.puzzleHash)) {
@@ -395,7 +390,7 @@ export function parseCondition(
 
     args.amount = {
       value: assertMyAmount.amount.toString(),
-      type: ConditionArgType.NonCopiable,
+      type: ArgType.NonCopiable,
     };
 
     if (coin.amount !== assertMyAmount.amount) {
@@ -410,7 +405,7 @@ export function parseCondition(
 
     args.seconds = {
       value: assertMyBirthSeconds.seconds.toString(),
-      type: ConditionArgType.NonCopiable,
+      type: ArgType.NonCopiable,
     };
   }
 
@@ -421,7 +416,7 @@ export function parseCondition(
 
     args.height = {
       value: assertMyBirthHeight.height.toString(),
-      type: ConditionArgType.NonCopiable,
+      type: ArgType.NonCopiable,
     };
   }
 
@@ -442,7 +437,7 @@ export function parseCondition(
 
     args.seconds = {
       value: assertSecondsRelative.seconds.toString(),
-      type: ConditionArgType.NonCopiable,
+      type: ArgType.NonCopiable,
     };
   }
 
@@ -453,7 +448,7 @@ export function parseCondition(
 
     args.height = {
       value: assertHeightRelative.height.toString(),
-      type: ConditionArgType.NonCopiable,
+      type: ArgType.NonCopiable,
     };
   }
 
@@ -464,7 +459,7 @@ export function parseCondition(
 
     args.seconds = {
       value: assertSecondsAbsolute.seconds.toString(),
-      type: ConditionArgType.NonCopiable,
+      type: ArgType.NonCopiable,
     };
   }
 
@@ -475,7 +470,7 @@ export function parseCondition(
 
     args.height = {
       value: assertHeightAbsolute.height.toString(),
-      type: ConditionArgType.NonCopiable,
+      type: ArgType.NonCopiable,
     };
   }
 
@@ -487,7 +482,7 @@ export function parseCondition(
 
     args.seconds = {
       value: assertBeforeSecondsRelative.seconds.toString(),
-      type: ConditionArgType.NonCopiable,
+      type: ArgType.NonCopiable,
     };
   }
 
@@ -499,7 +494,7 @@ export function parseCondition(
 
     args.height = {
       value: assertBeforeHeightRelative.height.toString(),
-      type: ConditionArgType.NonCopiable,
+      type: ArgType.NonCopiable,
     };
   }
 
@@ -511,7 +506,7 @@ export function parseCondition(
 
     args.seconds = {
       value: assertBeforeSecondsAbsolute.seconds.toString(),
-      type: ConditionArgType.NonCopiable,
+      type: ArgType.NonCopiable,
     };
   }
 
@@ -523,7 +518,7 @@ export function parseCondition(
 
     args.height = {
       value: assertBeforeHeightAbsolute.height.toString(),
-      type: ConditionArgType.NonCopiable,
+      type: ArgType.NonCopiable,
     };
   }
 
@@ -533,12 +528,12 @@ export function parseCondition(
 
     args.cost = {
       value: softfork.cost.toString(),
-      type: ConditionArgType.NonCopiable,
+      type: ArgType.NonCopiable,
     };
 
     args.rest = {
       value: softfork.rest.unparse(),
-      type: ConditionArgType.NonCopiable,
+      type: ArgType.NonCopiable,
     };
   }
 
