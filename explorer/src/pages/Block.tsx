@@ -6,7 +6,7 @@ import { Nft } from '@/contexts/MintGardenContext';
 import { useDexie } from '@/hooks/useDexie';
 import { useMintGarden } from '@/hooks/useMintGarden';
 import { BlockRecord, CoinRecord, getBlock, getCoins } from '@/lib/api';
-import { toAddress, toDecimal } from '@/lib/conversions';
+import { Precision, toAddress, toDecimal } from '@/lib/conversions';
 import { intlFormat } from 'date-fns';
 import { CoinsIcon, DatabaseIcon, HashIcon, LayersIcon } from 'lucide-react';
 import { PropsWithChildren, useEffect, useState } from 'react';
@@ -101,7 +101,7 @@ export function Block() {
                       {block.transaction_info.cost.toLocaleString()}
                     </Field>
                     <Field label='Transaction Fees'>
-                      {`${toDecimal(block.transaction_info.fees, 12)} XCH`}
+                      {`${toDecimal(block.transaction_info.fees, Precision.Xch)} XCH`}
                     </Field>
                   </>
                 )}
@@ -251,7 +251,12 @@ function CoinCard({ coinRecord, block }: CoinCardProps) {
                     <span className='break-all'>
                       {toDecimal(
                         coinRecord.coin.amount,
-                        coinRecord.type === 'cat' ? 3 : 12,
+                        coinRecord.type === 'cat'
+                          ? Precision.Cat
+                          : coinRecord.type === 'unknown' ||
+                              coinRecord.type == 'reward'
+                            ? Precision.Xch
+                            : Precision.Singleton,
                       )}
                     </span>{' '}
                     <span className='text-muted-foreground font-normal'>

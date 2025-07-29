@@ -5,7 +5,7 @@ import { Nft } from '@/contexts/MintGardenContext';
 import { useDexie } from '@/hooks/useDexie';
 import { useMintGarden } from '@/hooks/useMintGarden';
 import { BlockRecord, CoinRecord, getBlockByHeight, getCoin } from '@/lib/api';
-import { toAddress, toDecimal } from '@/lib/conversions';
+import { Precision, toAddress, toDecimal } from '@/lib/conversions';
 import { intlFormat } from 'date-fns';
 import {
   ArrowUpCircleIcon,
@@ -190,7 +190,11 @@ export function Coin() {
                       <span className='text-lg'>
                         {toDecimal(
                           coin.coin.amount,
-                          coin.type === 'cat' ? 3 : 12,
+                          coin.type === 'cat'
+                            ? Precision.Cat
+                            : coin.type === 'unknown' || coin.type === 'reward'
+                              ? Precision.Xch
+                              : Precision.Singleton,
                         )}
                       </span>{' '}
                       <span className='text-muted-foreground'>

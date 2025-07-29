@@ -1,14 +1,19 @@
 import { Layout } from '@/components/Layout';
+import { Truncated } from '@/components/Truncated';
 import { Textarea } from '@/components/ui/textarea';
-import { stripHex } from '@/lib/conversions';
+import { parseJson } from '@/lib/json';
+import {
+  ParsedCoin,
+  ParsedCoinSpend,
+  ParsedSpendBundle,
+  parseSpendBundle,
+} from '@/lib/parser';
 import {
   Coin,
   CoinSpend,
   decodeOffer,
-  fromHex,
   Signature,
   SpendBundle,
-  toHex,
 } from 'chia-wallet-sdk-wasm';
 import { useMemo } from 'react';
 import { useLocalStorage } from 'usehooks-ts';
@@ -42,6 +47,12 @@ export function Tools() {
     return null;
   }, [value]);
 
+  const parsedSpendBundle = useMemo(() => {
+    if (!spendBundle) return null;
+
+    return parseSpendBundle(spendBundle);
+  }, [spendBundle]);
+
   return (
     <Layout>
       <Textarea
@@ -51,132 +62,71 @@ export function Tools() {
         onChange={(e) => setValue(e.target.value)}
       />
 
-      {spendBundle && <BundleViewer bundle={spendBundle} />}
+      {parsedSpendBundle && <BundleViewer bundle={parsedSpendBundle} />}
     </Layout>
   );
 }
 
 interface BundleViewerProps {
-  bundle: SpendBundle;
+  bundle: ParsedSpendBundle;
 }
 
 function BundleViewer({ bundle }: BundleViewerProps) {
   return (
-    <div>
+    <div className='flex flex-col gap-2 mt-4'>
       {bundle.coinSpends.map((spend) => (
-        <SpendViewer key={toHex(spend.coin.coinId())} spend={spend} />
+        <SpendViewer key={spend.coin.coinId} spend={spend} />
       ))}
     </div>
   );
 }
 
 interface SpendViewerProps {
-  spend: CoinSpend;
+  spend: ParsedCoinSpend;
 }
 
 function SpendViewer({ spend }: SpendViewerProps) {
   return (
-    <div>
+    <div className='flex flex-col gap-2 p-2 rounded-md bg-card'>
       <CoinViewer coin={spend.coin} />
-      <div>
-        <div>{toHex(spend.puzzleReveal)}</div>
-        <div>{toHex(spend.solution)}</div>
+      <div className='flex flex-col p-2 rounded-md bg-accent'>
+        <div className='text-sm text-muted-foreground'>Puzzle Reveal</div>
+        <Truncated value={spend.puzzleReveal} />
+      </div>
+      <div className='flex flex-col p-2 rounded-md bg-accent'>
+        <div className='text-sm text-muted-foreground'>Solution</div>
+        <Truncated value={spend.solution} />
       </div>
     </div>
   );
 }
 
 interface CoinViewerProps {
-  coin: Coin;
+  coin: ParsedCoin;
 }
 
 function CoinViewer({ coin }: CoinViewerProps) {
   return (
-    <div>
-      <div>{toHex(coin.coinId())}</div>
-      <div>{coin.amount}</div>
-      <div>{toHex(coin.puzzleHash)}</div>
-      <div>{toHex(coin.parentCoinInfo)}</div>
+    <div className='flex flex-col gap-2'>
+      <div className='flex flex-col p-2 rounded-md bg-accent'>
+        <div className='text-sm text-muted-foreground'>Coin ID</div>
+        <Truncated value={coin.coinId} href={`/coin/${coin.coinId}`} />
+      </div>
+      <div className='flex flex-col p-2 rounded-md bg-accent'>
+        <div className='text-sm text-muted-foreground'>Parent Coin Info</div>
+        <Truncated
+          value={coin.parentCoinInfo}
+          href={`/coin/${coin.parentCoinInfo}`}
+        />
+      </div>
+      <div className='flex flex-col p-2 rounded-md bg-accent'>
+        <div className='text-sm text-muted-foreground'>Puzzle Hash</div>
+        <Truncated value={coin.puzzleHash} />
+      </div>
+      <div className='flex flex-col p-2 rounded-md bg-accent'>
+        <div className='text-sm text-muted-foreground'>Amount</div>
+        <div>{coin.amount}</div>
+      </div>
     </div>
   );
-}
-
-interface CoinJson {
-  parent_coin_info: string;
-  puzzle_hash: string;
-  amount: number;
-}
-
-interface CoinSpendJson {
-  coin: CoinJson;
-  puzzle_reveal: string;
-  solution: string;
-}
-
-interface SpendBundleJson {
-  coin_spends: CoinSpendJson[];
-  aggregated_signature: string;
-}
-
-interface WrappedSpendBundleJson {
-  spend_bundle: SpendBundleJson;
-}
-
-function parseCoin(json: CoinJson) {
-  return new Coin(
-    fromHex(stripHex(json.parent_coin_info)),
-    fromHex(stripHex(json.puzzle_hash)),
-    BigInt(json.amount),
-  );
-}
-
-function parseCoinSpend(json: CoinSpendJson) {
-  return new CoinSpend(
-    parseCoin(json.coin),
-    fromHex(stripHex(json.puzzle_reveal)),
-    fromHex(stripHex(json.solution)),
-  );
-}
-
-function parseSpendBundle(json: SpendBundleJson) {
-  return new SpendBundle(
-    json.coin_spends.map(parseCoinSpend),
-    Signature.fromBytes(fromHex(stripHex(json.aggregated_signature))),
-  );
-}
-
-function parseWrappedSpendBundle(json: WrappedSpendBundleJson) {
-  return parseSpendBundle(json.spend_bundle);
-}
-
-function parseJson(json: unknown) {
-  if (typeof json === 'string') {
-    return SpendBundle.fromBytes(fromHex(stripHex(json)));
-  }
-
-  if (typeof json !== 'object' || json === null) {
-    return null;
-  }
-
-  if (Array.isArray(json)) {
-    return new SpendBundle(json.map(parseCoinSpend), Signature.infinity());
-  }
-
-  if ('spend_bundle' in json) {
-    return parseWrappedSpendBundle(json as WrappedSpendBundleJson);
-  }
-
-  if ('coin_spends' in json) {
-    return parseSpendBundle(json as SpendBundleJson);
-  }
-
-  if ('coin' in json) {
-    return parseCoinSpend(json as CoinSpendJson);
-  }
-
-  if ('parent_coin_info' in json) {
-    return parseCoin(json as CoinJson);
-  }
-
-  return null;
 }

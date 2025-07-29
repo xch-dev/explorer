@@ -4,14 +4,37 @@ import { Address, fromHex } from 'chia-wallet-sdk-wasm';
 
 BigNumber.config({ EXPONENTIAL_AT: [-1e9, 1e9] });
 
-export function toDecimal(amount: BigNumber.Value, decimals: number): string {
-  return toBigNumber(amount, decimals).toString();
+export enum Precision {
+  Xch,
+  Cat,
+  Singleton,
+}
+
+export function toDecimal(
+  amount: BigNumber.Value,
+  precision: Precision,
+): string {
+  return toBigNumber(amount, precision).toString();
 }
 
 export function toBigNumber(
   amount: BigNumber.Value,
-  decimals: number,
+  precision: Precision,
 ): BigNumber {
+  let decimals: number;
+
+  switch (precision) {
+    case Precision.Xch:
+      decimals = 12;
+      break;
+    case Precision.Cat:
+      decimals = 3;
+      break;
+    case Precision.Singleton:
+      decimals = 12;
+      break;
+  }
+
   return BigNumber(amount).dividedBy(BigNumber(10).pow(decimals));
 }
 
