@@ -5,6 +5,7 @@ import { Textarea } from '@/components/ui/textarea';
 import { Nft } from '@/contexts/MintGardenContext';
 import { useDexie } from '@/hooks/useDexie';
 import { useMintGarden } from '@/hooks/useMintGarden';
+import { getCoinSpends } from '@/lib/api';
 import { Precision, toDecimal } from '@/lib/conversions';
 import { parseJson } from '@/lib/json';
 import {
@@ -26,10 +27,21 @@ import {
 } from 'chia-wallet-sdk-wasm';
 import { CoinsIcon, TriangleAlertIcon } from 'lucide-react';
 import { useEffect, useMemo, useState } from 'react';
+import { useParams } from 'react-router-dom';
 import { useLocalStorage } from 'usehooks-ts';
 
 export function Tools() {
+  const { hash } = useParams();
+
   const [value, setValue] = useLocalStorage('tools-bundle', '');
+
+  useEffect(() => {
+    if (!hash) return;
+
+    getCoinSpends(hash).then((coinSpends) => {
+      setValue(JSON.stringify(coinSpends));
+    });
+  }, [hash, setValue]);
 
   const parsedSpendBundle = useMemo(() => {
     if (!value) return null;

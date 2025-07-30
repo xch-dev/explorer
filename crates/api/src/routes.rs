@@ -32,7 +32,8 @@ pub fn router(app: App) -> Router {
         .route("/coins/block/{hash}", get(coins_by_block))
         .route("/coins/children/{coin_id}", get(coins_by_parent))
         .route("/coins/id/{coin_id}", get(coin_by_id))
-        .route("/spend/{coin_id}", get(spend_by_coin_id))
+        .route("/spends/block/{hash}", get(spends_by_block))
+        .route("/spends/id/{coin_id}", get(spend_by_id))
         .with_state(app)
         .layer(cors)
 }
@@ -221,11 +222,51 @@ async fn coin_by_id(
 }
 
 #[derive(Serialize)]
+pub struct SpendsResponse {
+    pub spends: Vec<CoinSpendRecord>,
+}
+
+async fn spends_by_block(
+    State(app): State<App>,
+    Path(hash): Path<Bytes32>,
+) -> Result<Json<SpendsResponse>, StatusCode> {
+    let Some(height) = app.db.block_height(hash).unwrap() else {
+        return Err(StatusCode::NOT_FOUND);
+    };
+
+    let mut spends = IndexMap::new();
+
+    for coin_id in app.db.coins_by_height(height).unwrap() {
+        if spends.contains_key(&coin_id) {
+            continue;
+        }
+
+        let Some(coin) = app.db.coin(coin_id).unwrap() else {
+            continue;
+        };
+
+        if coin.spent_height != Some(height) {
+            continue;
+        }
+
+        let Some(spend) = app.db.coin_spend(coin_id).unwrap() else {
+            continue;
+        };
+
+        spends.insert(coin_id, spend);
+    }
+
+    Ok(Json(SpendsResponse {
+        spends: spends.into_values().collect_vec(),
+    }))
+}
+
+#[derive(Serialize)]
 pub struct SpendResponse {
     pub spend: CoinSpendRecord,
 }
 
-async fn spend_by_coin_id(
+async fn spend_by_id(
     State(app): State<App>,
     Path(coin_id): Path<Bytes32>,
 ) -> Result<Json<SpendResponse>, StatusCode> {

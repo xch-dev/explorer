@@ -107,6 +107,10 @@ export interface CoinSpendResponse {
   spend: CoinSpend | null;
 }
 
+export interface CoinSpendsResponse {
+  spends: CoinSpend[];
+}
+
 export async function getBlocks() {
   const response = await get<BlocksResponse>('/blocks?reverse=true&limit=50');
   return response.blocks;
@@ -133,6 +137,11 @@ export async function getCoin(id: string) {
 }
 
 export async function getCoinSpend(id: string) {
-  const response = await get<CoinSpendResponse>(`/spend/${id}`);
+  const response = await get<CoinSpendResponse>(`/spends/id/${id}`);
   return response.spend;
+}
+
+export async function getCoinSpends(hash: string) {
+  const response = await get<CoinSpendsResponse>(`/spends/block/${hash}`);
+  return response.spends;
 }

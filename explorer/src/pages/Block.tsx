@@ -2,18 +2,27 @@ import { External } from '@/components/External';
 import { Layout } from '@/components/Layout';
 import { Truncated } from '@/components/Truncated';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
+import { Button } from '@/components/ui/button';
 import { Nft } from '@/contexts/MintGardenContext';
 import { useDexie } from '@/hooks/useDexie';
 import { useMintGarden } from '@/hooks/useMintGarden';
 import { BlockRecord, CoinRecord, getBlock, getCoins } from '@/lib/api';
 import { Precision, toAddress, toDecimal } from '@/lib/conversions';
 import { intlFormat } from 'date-fns';
-import { CoinsIcon, DatabaseIcon, HashIcon, LayersIcon } from 'lucide-react';
+import {
+  CoinsIcon,
+  DatabaseIcon,
+  EyeIcon,
+  HashIcon,
+  LayersIcon,
+} from 'lucide-react';
 import { PropsWithChildren, useEffect, useState } from 'react';
-import { Link, useParams } from 'react-router-dom';
+import { Link, useNavigate, useParams } from 'react-router-dom';
 
 export function Block() {
   const { hash } = useParams();
+
+  const navigate = useNavigate();
 
   const [block, setBlock] = useState<BlockRecord | null>(null);
   const [coins, setCoins] = useState<CoinRecord[]>([]);
@@ -119,6 +128,14 @@ export function Block() {
                     <div className='text-lg text-red-600'>
                       -{block.transaction_info.removals}
                     </div>
+                    <Button
+                      variant='outline'
+                      size='sm'
+                      onClick={() => navigate(`/tools/${block.header_hash}`)}
+                    >
+                      <EyeIcon className='w-4 h-4' />
+                      View
+                    </Button>
                   </div>
                   <div className='space-y-2'>
                     {coins

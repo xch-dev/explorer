@@ -17,6 +17,7 @@ const router = createBrowserRouter(
     <>
       <Route path='/' element={<Home />} />
       <Route path='/tools' element={<Tools />} />
+      <Route path='/tools/:hash' element={<Tools />} />
       <Route path='/block/:hash' element={<Block />} />
       <Route path='/coin/:id' element={<Coin />} />
     </>,
