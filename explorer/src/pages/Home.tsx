@@ -5,7 +5,7 @@ import {
   TooltipContent,
   TooltipTrigger,
 } from '@/components/ui/tooltip';
-import { BlockRecord, getBlocks } from '@/lib/api';
+import { BlockRecord, getBlock, getBlockByHeight, getBlocks } from '@/lib/api';
 import { MAX_BLOCK_COST } from '@/lib/constants';
 import { truncateHash } from '@/lib/conversions';
 import { intlFormat, intlFormatDistance } from 'date-fns';
@@ -16,34 +16,67 @@ import { Link } from 'react-router-dom';
 export function Home() {
   const [blocks, setBlocks] = useState<BlockRecord[]>([]);
   const [search, setSearch] = useState('');
+  const [searchResult, setSearchResult] = useState<BlockRecord | null>(null);
+  const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     getBlocks().then(setBlocks);
   }, []);
 
+  const handleSearch = async (value: string) => {
+    setSearch(value);
+    setError(null);
+
+    if (!value) {
+      setSearchResult(null);
+      return;
+    }
+
+    try {
+      let block: BlockRecord | null = null;
+
+      // Try parsing as block height first
+      const height = parseInt(value);
+      if (!isNaN(height) && height < 2 ** 32) {
+        block = await getBlockByHeight(height);
+      } else {
+        // If not a number, try as header hash
+        block = await getBlock(value);
+      }
+
+      if (block) {
+        setSearchResult(block);
+      } else {
+        setError('Block not found');
+      }
+    } catch {
+      setError('Failed to fetch block');
+    }
+  };
+
+  const displayedBlocks = searchResult ? [searchResult] : blocks;
+
   return (
     <Layout>
-      <div className='flex items-center justify-between mb-6'>
-        <h1 className='text-3xl font-semibold'>Recent Blocks</h1>
-        <Input
-          className='w-80'
-          placeholder='Search by height or hash...'
-          value={search}
-          onChange={(e) => setSearch(e.target.value)}
-        />
+      <div className='flex flex-col md:flex-row md:items-center justify-between gap-4 mb-6'>
+        <h1 className='text-3xl font-semibold'>
+          {searchResult ? 'Search Result' : 'Recent Blocks'}
+        </h1>
+        <div className='w-full md:w-80 space-y-2'>
+          <Input
+            className='w-full'
+            placeholder='Search by height or hash...'
+            value={search}
+            onChange={(e) => handleSearch(e.target.value)}
+          />
+          {error && <div className='text-sm text-red-500'>{error}</div>}
+        </div>
       </div>
 
       <div className='grid gap-2'>
-        {blocks
-          .filter(
-            (block) =>
-              search === '' ||
-              block.height.toString().includes(search) ||
-              block.header_hash.toLowerCase().includes(search.toLowerCase()),
-          )
-          .map((block) => (
-            <Block key={block.height} block={block} />
-          ))}
+        {displayedBlocks.map((block) => (
+          <Block key={block.height} block={block} />
+        ))}
       </div>
     </Layout>
   );
