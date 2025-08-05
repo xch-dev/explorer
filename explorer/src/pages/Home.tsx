@@ -8,13 +8,9 @@ import {
 import { useCoinset } from '@/hooks/useCoinset';
 import { MAX_BLOCK_COST } from '@/lib/constants';
 import { stripHex, truncateHash } from '@/lib/conversions';
-import {
-  BlockRecord,
-  Clvm,
-  fromHex,
-  FullBlock,
-  toHex,
-} from 'chia-wallet-sdk-wasm';
+import { ParsedCoin } from '@/lib/parser';
+import { parseBlockSpends } from '@/lib/parser/blockSpends';
+import { BlockRecord, fromHex, FullBlock, toHex } from 'chia-wallet-sdk-wasm';
 import { intlFormat, intlFormatDistance } from 'date-fns';
 import { CoinsIcon, HashIcon, LayersIcon } from 'lucide-react';
 import { useEffect, useState } from 'react';
@@ -37,7 +33,7 @@ export function Home() {
         return;
       }
 
-      setBlockRecords(data.blockRecords ?? []);
+      setBlockRecords(data.blockRecords?.reverse() ?? []);
     });
   }, [client, peak]);
 
@@ -120,8 +116,8 @@ function Block({ blockRecord }: BlockProps) {
   const { client } = useCoinset();
 
   const [block, setBlock] = useState<FullBlock | null>(null);
-  const [additions, setAdditions] = useState(0);
-  const [removals, setRemovals] = useState(0);
+  const [additions, setAdditions] = useState<ParsedCoin[]>([]);
+  const [removals, setRemovals] = useState<ParsedCoin[]>([]);
 
   useEffect(() => {
     client.getBlock(blockRecord.headerHash).then((data) => {
@@ -137,31 +133,13 @@ function Block({ blockRecord }: BlockProps) {
         console.error(data.error);
       }
 
-      const blockSpends = data.blockSpends ?? [];
-
-      const clvm = new Clvm();
-
-      setAdditions(
-        blockSpends.reduce((acc, spend) => {
-          const puzzle = clvm.deserialize(spend.puzzleReveal);
-          const solution = clvm.deserialize(spend.solution);
-          const conditions =
-            puzzle
-              .run(solution, BigInt(MAX_BLOCK_COST), false)
-              .value.toList() ?? [];
-
-          let result = acc;
-
-          for (const condition of conditions) {
-            if (condition.parseCreateCoin()) {
-              result += 1;
-            }
-          }
-
-          return result;
-        }, 0),
+      const parsed = parseBlockSpends(
+        blockRecord.rewardClaimsIncorporated ?? [],
+        data.blockSpends ?? [],
       );
-      setRemovals(blockSpends.length);
+
+      setAdditions(parsed.additions);
+      setRemovals(parsed.removals);
     });
   }, [blockRecord, client]);
 
@@ -213,9 +191,9 @@ function Block({ blockRecord }: BlockProps) {
               </Tooltip>
               {block?.transactionsInfo && (
                 <div className='text-sm mt-1'>
-                  <span className='text-green-600'>+{additions}</span>
+                  <span className='text-green-600'>+{additions.length}</span>
                   <span className='text-muted-foreground'> / </span>
-                  <span className='text-red-500'>-{removals}</span>
+                  <span className='text-red-500'>-{removals.length}</span>
                   <span className='text-muted-foreground'>
                     {' '}
                     coins (

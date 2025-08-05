@@ -1,6 +1,12 @@
-import { bytesEqual, Constants, Puzzle, toHex } from 'chia-wallet-sdk-wasm';
+import {
+  bytesEqual,
+  Coin,
+  Constants,
+  Puzzle,
+  toHex,
+} from 'chia-wallet-sdk-wasm';
 import { toAddress } from '../conversions';
-import { parseCoin, ParsedCoin } from './coin';
+import { CoinType, parseCoin, ParsedCoin } from './coin';
 import { parseCondition, ParsedCondition } from './conditions';
 import { ParserContext } from './context';
 import { DeserializedCoinSpend } from './deserializedCoinSpend';
@@ -14,15 +20,7 @@ export interface ParsedCoinSpend {
   cost: string;
   conditions: ParsedCondition[];
   layer: ParsedLayer;
-  assetType: AssetType;
-  assetId: string;
-}
-
-export enum AssetType {
-  Token,
-  Nft,
-  Did,
-  Singleton,
+  outputs: ParsedCoin[];
 }
 
 export function parseCoinSpend(
@@ -98,13 +96,61 @@ export function parseCoinSpend(
     }
   }
 
+  let assetId = 'xch';
+  let type = CoinType.Unknown;
+
   const cat = puzzle.parseCat();
-  const nft = puzzle.parseNft();
-  const did = puzzle.parseDid();
+  if (cat) {
+    assetId = `0x${toHex(cat.info.assetId)}`;
+    type = CoinType.Cat;
+  }
+
   const singleton = parseSingleton(puzzle);
+  if (singleton) {
+    assetId = toAddress(toHex(singleton), 'vault');
+    type = CoinType.Vault;
+  }
+
+  const nft = puzzle.parseNft();
+  if (nft) {
+    assetId = toAddress(toHex(nft.info.launcherId), 'nft');
+    type = CoinType.Nft;
+  }
+
+  const did = puzzle.parseDid();
+  if (did) {
+    assetId = toAddress(toHex(did.info.launcherId), 'did:chia:');
+    type = CoinType.Did;
+  }
+
+  const outputs: ParsedCoin[] = [];
+
+  for (const condition of conditions) {
+    const createCoin = condition.parseCreateCoin();
+    if (!createCoin) continue;
+
+    const child = new Coin(
+      coinSpend.coin.coinId(),
+      createCoin.puzzleHash,
+      createCoin.amount,
+    );
+
+    const preserveType = child.amount % 2n === 1n || cat;
+
+    const hint = createCoin.memos?.toList()?.[0]?.toAtom();
+
+    outputs.push(
+      parseCoin(
+        child,
+        preserveType ? type : CoinType.Unknown,
+        preserveType ? assetId : 'xch',
+        hint?.length === 32 ? toHex(hint) : undefined,
+      ),
+    );
+  }
 
   return {
-    coin: parseCoin(coinSpend.coin),
+    coin: parseCoin(coinSpend.coin, type, assetId),
     puzzleReveal: toHex(coinSpend.puzzleReveal),
     solution: toHex(coinSpend.solution),
     cost: cost.toLocaleString(),
@@ -112,22 +158,7 @@ export function parseCoinSpend(
       parseCondition(coinSpend.coin, condition, ctx, isFastForwardable),
     ),
     layer: parseLayer(puzzle),
-    assetId: cat
-      ? `0x${toHex(cat.info.assetId)}`
-      : nft
-        ? toAddress(toHex(nft.info.launcherId), 'nft')
-        : did
-          ? toAddress(toHex(did.info.launcherId), 'did:chia:')
-          : singleton
-            ? toAddress(toHex(singleton), 'vault')
-            : 'xch',
-    assetType: nft
-      ? AssetType.Nft
-      : did
-        ? AssetType.Did
-        : singleton
-          ? AssetType.Singleton
-          : AssetType.Token,
+    outputs,
   };
 }
 

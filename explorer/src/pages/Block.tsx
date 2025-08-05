@@ -4,10 +4,13 @@ import { Truncated } from '@/components/Truncated';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { Button } from '@/components/ui/button';
 import { Nft } from '@/contexts/MintGardenContext';
+import { useCoinset } from '@/hooks/useCoinset';
 import { useDexie } from '@/hooks/useDexie';
 import { useMintGarden } from '@/hooks/useMintGarden';
-import { BlockRecord, CoinRecord, getBlock, getCoins } from '@/lib/api';
-import { Precision, toAddress, toDecimal } from '@/lib/conversions';
+import { Precision, stripHex, toAddress, toDecimal } from '@/lib/conversions';
+import { ParsedCoin } from '@/lib/parser';
+import { parseBlockSpends } from '@/lib/parser/blockSpends';
+import { CoinSpend, fromHex, FullBlock, toHex } from 'chia-wallet-sdk-wasm';
 import { intlFormat } from 'date-fns';
 import {
   CoinsIcon,
@@ -16,33 +19,59 @@ import {
   HashIcon,
   LayersIcon,
 } from 'lucide-react';
-import { PropsWithChildren, useEffect, useState } from 'react';
+import { PropsWithChildren, useEffect, useMemo, useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 
 export function Block() {
   const { hash } = useParams();
+  const { client } = useCoinset();
 
   const navigate = useNavigate();
 
-  const [block, setBlock] = useState<BlockRecord | null>(null);
-  const [coins, setCoins] = useState<CoinRecord[]>([]);
+  const [block, setBlock] = useState<FullBlock | null>(null);
+  const [blockSpends, setBlockSpends] = useState<CoinSpend[] | null>(null);
 
   useEffect(() => {
     if (!hash) return;
 
-    getBlock(hash).then(setBlock);
-    getCoins(hash).then(setCoins);
-  }, [hash]);
+    const headerHash = fromHex(stripHex(hash));
 
-  const timestamp = block?.transaction_info
-    ? new Date(block.transaction_info.timestamp * 1000)
+    client.getBlock(headerHash).then((data) => {
+      if (data.error) {
+        console.error(data.error);
+      }
+
+      setBlock(data.block ?? null);
+    });
+
+    client.getBlockSpends(headerHash).then((data) => {
+      if (data.error) {
+        console.error(data.error);
+      }
+
+      setBlockSpends(data.blockSpends ?? []);
+    });
+  }, [hash, client]);
+
+  const parsed = useMemo(() => {
+    if (!block || !blockSpends) return null;
+
+    return parseBlockSpends(
+      block.transactionsInfo?.rewardClaimsIncorporated ?? [],
+      blockSpends,
+    );
+  }, [block, blockSpends]);
+
+  const timestamp = block?.foliageTransactionBlock
+    ? new Date(Number(block.foliageTransactionBlock.timestamp) * 1000)
     : null;
 
   return (
     <Layout>
       <div className='flex items-baseline gap-3 mb-2'>
         <h1 className='text-3xl font-semibold'>
-          Block {block?.height.toLocaleString() ?? 'loading...'}
+          Block{' '}
+          {block?.rewardChainBlock.height.toLocaleString() ?? 'loading...'}
         </h1>
         {timestamp && (
           <div className='text-lg text-muted-foreground'>
@@ -64,31 +93,43 @@ export function Block() {
               </h2>
               <div className='grid gap-3 text-sm'>
                 <Field label='Block Hash'>
-                  <Truncated
-                    value={block.header_hash}
-                    href={`/block/${block.header_hash}`}
-                  />
+                  <Truncated value={hash ?? ''} href={`/block/${hash}`} />
                 </Field>
                 <Field label='Previous Block'>
                   <Truncated
-                    value={block.prev_block_hash}
-                    href={`/block/${block.prev_block_hash}`}
+                    value={toHex(block.foliage.prevBlockHash)}
+                    href={`/block/${toHex(block.foliage.prevBlockHash)}`}
                   />
                 </Field>
-                {block.transaction_info?.prev_transaction_block_hash && (
+                {block.foliageTransactionBlock?.prevTransactionBlockHash && (
                   <Field label='Previous Transaction Block'>
                     <Truncated
-                      value={block.transaction_info.prev_transaction_block_hash}
-                      href={`/block/${block.transaction_info.prev_transaction_block_hash}`}
+                      value={toHex(
+                        block.foliageTransactionBlock.prevTransactionBlockHash,
+                      )}
+                      href={`/block/${toHex(block.foliageTransactionBlock.prevTransactionBlockHash)}`}
                     />
                   </Field>
                 )}
                 <Field label='Farmer Address'>
-                  <Truncated value={toAddress(block.farmer_puzzle_hash)} />
+                  <Truncated
+                    value={toAddress(
+                      toHex(
+                        block.foliage.foliageBlockData.farmerRewardPuzzleHash,
+                      ),
+                    )}
+                  />
                 </Field>
-                {block.pool_puzzle_hash && (
+                {block.rewardChainBlock.proofOfSpace.poolContractPuzzleHash && (
                   <Field label='Pool Address'>
-                    <Truncated value={toAddress(block.pool_puzzle_hash)} />
+                    <Truncated
+                      value={toAddress(
+                        toHex(
+                          block.rewardChainBlock.proofOfSpace
+                            .poolContractPuzzleHash,
+                        ),
+                      )}
+                    />
                   </Field>
                 )}
               </div>
@@ -101,16 +142,18 @@ export function Block() {
               </h2>
               <div className='grid gap-3 text-sm'>
                 <Field label='Total Iterations'>
-                  {block.total_iters.toLocaleString()}
+                  {block.rewardChainBlock.totalIters.toLocaleString()}
                 </Field>
-                <Field label='Weight'>{block.weight.toLocaleString()}</Field>
-                {block.transaction_info && (
+                <Field label='Weight'>
+                  {block.rewardChainBlock.weight.toLocaleString()}
+                </Field>
+                {block.transactionsInfo && (
                   <>
                     <Field label='Transaction Cost'>
-                      {block.transaction_info.cost.toLocaleString()}
+                      {block.transactionsInfo.cost.toLocaleString()}
                     </Field>
                     <Field label='Transaction Fees'>
-                      {`${toDecimal(block.transaction_info.fees, Precision.Xch)} XCH`}
+                      {`${toDecimal(block.transactionsInfo.fees, Precision.Xch)} XCH`}
                     </Field>
                   </>
                 )}
@@ -118,7 +161,7 @@ export function Block() {
             </section>
           </div>
 
-          {block?.transaction_info ? (
+          {block?.transactionsInfo && parsed ? (
             <>
               <div className='grid md:grid-cols-2 gap-4 mt-6'>
                 <div>
@@ -126,27 +169,30 @@ export function Block() {
                     <CoinsIcon className='w-5 h-5' />
                     <h2 className='text-xl font-medium'>Spent</h2>
                     <div className='text-lg text-red-600'>
-                      -{block.transaction_info.removals}
+                      -{parsed.removals.length}
                     </div>
                     <Button
                       variant='outline'
                       size='sm'
-                      onClick={() => navigate(`/tools/${block.header_hash}`)}
+                      onClick={() => navigate(`/tools/${hash}`)}
                     >
                       <EyeIcon className='w-4 h-4' />
                       View
                     </Button>
                   </div>
                   <div className='space-y-2'>
-                    {coins
-                      .filter((coin) => coin.spent_height === block.height)
-                      .map((coin) => (
-                        <CoinCard
-                          key={`spent-${coin.coin_id}`}
-                          coinRecord={coin}
-                          block={block}
-                        />
-                      ))}
+                    {parsed.removals.map((coin) => (
+                      <CoinCard
+                        key={`spent-${coin.coinId}`}
+                        coin={coin}
+                        isCreated={
+                          parsed.additions.findIndex(
+                            (c) => c.coinId === coin.coinId,
+                          ) !== -1
+                        }
+                        isSpent={true}
+                      />
+                    ))}
                   </div>
                 </div>
 
@@ -155,19 +201,22 @@ export function Block() {
                     <CoinsIcon className='w-5 h-5' />
                     <h2 className='text-xl font-medium'>Created</h2>
                     <div className='text-lg text-green-600'>
-                      +{block.transaction_info.additions}
+                      +{parsed.additions.length}
                     </div>
                   </div>
                   <div className='space-y-2'>
-                    {coins
-                      .filter((coin) => coin.created_height === block.height)
-                      .map((coin) => (
-                        <CoinCard
-                          key={`created-${coin.coin_id}`}
-                          coinRecord={coin}
-                          block={block}
-                        />
-                      ))}
+                    {parsed.additions.map((coin) => (
+                      <CoinCard
+                        key={`created-${coin.coinId}`}
+                        coin={coin}
+                        isCreated={true}
+                        isSpent={
+                          parsed.removals.findIndex(
+                            (c) => c.coinId === coin.coinId,
+                          ) !== -1
+                        }
+                      />
+                    ))}
                   </div>
                 </div>
               </div>
@@ -208,33 +257,34 @@ function Field({ label, children }: FieldProps) {
 }
 
 interface CoinCardProps {
-  coinRecord: CoinRecord;
-  block: BlockRecord | null;
+  coin: ParsedCoin;
+  isCreated: boolean;
+  isSpent: boolean;
 }
 
-function CoinCard({ coinRecord, block }: CoinCardProps) {
+function CoinCard({ coin, isCreated, isSpent }: CoinCardProps) {
   const { getToken } = useDexie();
   const { fetchNft } = useMintGarden();
-  const [nft, setNft] = useState<Nft | null>(null);
-  const isCreated = coinRecord.created_height === block?.height;
-  const isSpent = coinRecord.spent_height === block?.height;
+  const [nft, setNft] = useState<Nft | null | undefined>(undefined);
 
   useEffect(() => {
-    if (coinRecord.type === 'nft' && 'launcher_id' in coinRecord) {
-      fetchNft(coinRecord.launcher_id).then(setNft);
+    if (nft !== undefined) return;
+
+    if (coin.type === 'nft') {
+      fetchNft(coin.assetId).then(setNft);
     }
-  }, [coinRecord, fetchNft]);
+  }, [coin, fetchNft, nft]);
 
   const token =
-    coinRecord.type === 'cat' && 'asset_id' in coinRecord
-      ? getToken(coinRecord.asset_id)
-      : coinRecord.type === 'unknown' || coinRecord.type === 'reward'
+    coin.type === 'cat'
+      ? getToken(coin.assetId)
+      : coin.type === 'unknown' || coin.type === 'reward'
         ? getToken('xch')
         : null;
 
   return (
     <Link
-      to={`/coin/${coinRecord.coin_id}`}
+      to={`/coin/${coin.coinId}`}
       className='block bg-card border rounded-lg hover:bg-accent/75 transition-colors overflow-hidden'
     >
       <div className='p-1.5'>
@@ -267,21 +317,19 @@ function CoinCard({ coinRecord, block }: CoinCardProps) {
                   <>
                     <span className='break-all'>
                       {toDecimal(
-                        coinRecord.coin.amount,
-                        coinRecord.type === 'cat'
+                        coin.amount,
+                        coin.type === 'cat'
                           ? Precision.Cat
-                          : coinRecord.type === 'unknown' ||
-                              coinRecord.type == 'reward'
+                          : coin.type === 'unknown' || coin.type == 'reward'
                             ? Precision.Xch
                             : Precision.Singleton,
                       )}
                     </span>{' '}
                     <span className='text-muted-foreground font-normal'>
                       {token?.code ||
-                        (coinRecord.type === 'cat'
+                        (coin.type === 'cat'
                           ? 'CAT'
-                          : coinRecord.type === 'unknown' ||
-                              coinRecord.type === 'reward'
+                          : coin.type === 'unknown' || coin.type === 'reward'
                             ? 'XCH'
                             : '')}
                     </span>
@@ -289,7 +337,7 @@ function CoinCard({ coinRecord, block }: CoinCardProps) {
                 )}
               </div>
               <div className='font-mono text-xs text-muted-foreground truncate'>
-                <Truncated value={coinRecord.coin_id} disableCopy />
+                <Truncated value={coin.coinId} disableCopy />
               </div>
             </div>
           </div>

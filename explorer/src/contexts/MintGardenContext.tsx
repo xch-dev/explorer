@@ -1,5 +1,12 @@
 import { toAddress } from '@/lib/conversions';
-import { createContext, useCallback, useState, type ReactNode } from 'react';
+import { RateLimiter } from 'limiter';
+import {
+  createContext,
+  useCallback,
+  useRef,
+  useState,
+  type ReactNode,
+} from 'react';
 
 export interface Nft {
   id: string;
@@ -24,6 +31,10 @@ export const MintGardenContext = createContext<
 
 export function MintGardenProvider({ children }: { children: ReactNode }) {
   const [nfts, setNfts] = useState<Record<string, Nft>>({});
+  // Allow 2 requests per second
+  const rateLimiter = useRef(
+    new RateLimiter({ tokensPerInterval: 2, interval: 'second' }),
+  );
 
   const fetchNft = useCallback(
     async (launcherId: string) => {
@@ -32,6 +43,8 @@ export function MintGardenProvider({ children }: { children: ReactNode }) {
       }
 
       try {
+        await rateLimiter.current.removeTokens(1);
+
         const bech32 = launcherId.startsWith('nft')
           ? launcherId
           : toAddress(launcherId, 'nft');

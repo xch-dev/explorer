@@ -1,11 +1,28 @@
 import { ColoredLink } from '@/components/ColoredLink';
 import { Layout } from '@/components/Layout';
+import { SpendViewer } from '@/components/SpendViewer';
 import { Truncated } from '@/components/Truncated';
 import { Nft } from '@/contexts/MintGardenContext';
+import { useCoinset } from '@/hooks/useCoinset';
 import { useDexie } from '@/hooks/useDexie';
 import { useMintGarden } from '@/hooks/useMintGarden';
-import { BlockRecord, CoinRecord, getBlockByHeight, getCoin } from '@/lib/api';
-import { Precision, toAddress, toDecimal } from '@/lib/conversions';
+import { Precision, stripHex, toDecimal } from '@/lib/conversions';
+import {
+  CoinType,
+  parseCoin,
+  ParsedCoin,
+  ParsedCoinSpend,
+  parseSpendBundle,
+} from '@/lib/parser';
+import {
+  BlockRecord,
+  CoinRecord,
+  CoinSpend,
+  fromHex,
+  Signature,
+  SpendBundle,
+  toHex,
+} from 'chia-wallet-sdk-wasm';
 import { intlFormat } from 'date-fns';
 import {
   ArrowUpCircleIcon,
@@ -20,53 +37,145 @@ import { useParams } from 'react-router-dom';
 
 export function Coin() {
   const { id } = useParams();
+  const { client } = useCoinset();
   const { getToken } = useDexie();
   const { fetchNft } = useMintGarden();
 
-  const [coin, setCoin] = useState<CoinRecord | null>(null);
+  const [coinRecord, setCoinRecord] = useState<CoinRecord | null>(null);
   const [createdBlock, setCreatedBlock] = useState<BlockRecord | null>(null);
   const [spentBlock, setSpentBlock] = useState<BlockRecord | null>(null);
-  const [nft, setNft] = useState<Nft | null>(null);
+  const [nft, setNft] = useState<Nft | null | undefined>(undefined);
+  const [coin, setCoin] = useState<ParsedCoin | null>(null);
+  const [coinSpend, setCoinSpend] = useState<ParsedCoinSpend | null>(null);
 
   useEffect(() => {
     if (!id) return;
-    getCoin(id).then(setCoin);
-  }, [id]);
+
+    client.getCoinRecordByName(fromHex(stripHex(id))).then((data) => {
+      if (data.error) {
+        console.error(data.error);
+        return;
+      }
+
+      setCoinRecord(data.coinRecord ?? null);
+    });
+  }, [id, client]);
 
   useEffect(() => {
-    if (!coin) return;
+    if (!coinRecord) return;
 
-    getBlockByHeight(coin.created_height).then(setCreatedBlock);
+    client
+      .getBlockRecordByHeight(coinRecord.confirmedBlockIndex)
+      .then((data) => {
+        if (data.error) {
+          console.error(data.error);
+          return;
+        }
 
-    if (coin.spent_height) {
-      getBlockByHeight(coin.spent_height).then(setSpentBlock);
+        setCreatedBlock(data.blockRecord ?? null);
+      });
+
+    if (coinRecord.spentBlockIndex) {
+      client.getBlockRecordByHeight(coinRecord.spentBlockIndex).then((data) => {
+        if (data.error) {
+          console.error(data.error);
+          return;
+        }
+
+        setSpentBlock(data.blockRecord ?? null);
+      });
     }
 
-    if (coin.type === 'nft') {
-      fetchNft(coin.launcher_id).then(setNft);
+    if (coinRecord.coinbase) {
+      setCoin(parseCoin(coinRecord.coin, CoinType.Reward, 'xch'));
+    } else {
+      Promise.all([
+        client.getCoinRecordByName(coinRecord.coin.parentCoinInfo),
+        client.getPuzzleAndSolution(coinRecord.coin.parentCoinInfo),
+        client.getPuzzleAndSolution(coinRecord.coin.coinId()),
+      ]).then(([parent, parentSpend, spend]) => {
+        if (spend.coinSolution) {
+          const parsed = parseSpendBundle(
+            new SpendBundle(
+              [
+                new CoinSpend(
+                  coinRecord.coin,
+                  spend.coinSolution.puzzleReveal,
+                  spend.coinSolution.solution,
+                ),
+              ],
+              Signature.infinity(),
+            ),
+            false,
+          );
+
+          setCoin(parsed.coinSpends[0].coin);
+          setCoinSpend(parsed.coinSpends[0]);
+
+          return;
+        }
+
+        if (parent.error) {
+          console.error(parent.error);
+          return;
+        }
+
+        if (!parent.coinRecord) {
+          console.error('No parent coin record found');
+          return;
+        }
+
+        if (parentSpend.error) {
+          console.error(parentSpend.error);
+          return;
+        }
+
+        if (!parentSpend.coinSolution) {
+          console.error('No coin solution found');
+          return;
+        }
+
+        const parsed = parseSpendBundle(
+          new SpendBundle(
+            [
+              new CoinSpend(
+                parent.coinRecord.coin,
+                parentSpend.coinSolution.puzzleReveal,
+                parentSpend.coinSolution.solution,
+              ),
+            ],
+            Signature.infinity(),
+          ),
+          false,
+        );
+
+        setCoin(
+          parsed.coinSpends[0].outputs.filter(
+            (c) => stripHex(c.coinId) === toHex(coinRecord.coin.coinId()),
+          )[0],
+        );
+      });
     }
-  }, [coin, fetchNft]);
+  }, [coinRecord, client]);
+
+  useEffect(() => {
+    if (nft !== undefined) return;
+
+    if (coin?.type === 'nft') {
+      fetchNft(coin.assetId).then(setNft);
+    }
+  }, [coin, fetchNft, nft]);
 
   const token = coin
     ? coin.type === 'cat'
-      ? getToken(coin.asset_id)
-      : coin.type === 'reward'
+      ? getToken(coin.assetId)
+      : coin.assetId === 'xch'
         ? getToken('xch')
         : null
     : null;
 
   const icon = token?.icon ?? nft?.data?.thumbnail_uri;
   const name = token?.name ?? nft?.data?.metadata_json?.name;
-  const assetId =
-    coin?.type === 'cat'
-      ? coin.asset_id
-      : coin?.type === 'singleton'
-        ? coin.launcher_id
-        : coin?.type === 'nft'
-          ? toAddress(coin.launcher_id, 'nft')
-          : coin?.type === 'did'
-            ? toAddress(coin.launcher_id, 'did:chia:')
-            : null;
 
   return (
     <Layout>
@@ -91,9 +200,9 @@ export function Coin() {
                     {name || 'Unnamed'}
                   </h1>
                   <div className='flex flex-col sm:flex-row sm:items-center gap-1 sm:gap-2 text-muted-foreground'>
-                    {assetId && (
+                    {coin?.assetId && coin.assetId !== 'xch' && (
                       <div className='font-mono text-sm'>
-                        <Truncated value={assetId} />
+                        <Truncated value={coin.assetId} />
                       </div>
                     )}
                   </div>
@@ -117,7 +226,7 @@ export function Coin() {
           </div>
           {coin && (
             <div className='flex items-center gap-2 px-4 py-2 rounded-full bg-card border self-start sm:self-center'>
-              {coin.spent_height ? (
+              {coinRecord?.spentBlockIndex ? (
                 <>
                   <ArrowUpCircleIcon className='w-5 h-5 text-blue-500' />
                   <span className='font-medium'>Spent</span>
@@ -133,28 +242,28 @@ export function Coin() {
         </div>
 
         {coin && (
-          <div className='grid gap-4 mt-2'>
-            <div className='grid gap-4 lg:grid-cols-2'>
-              <section className='bg-card border rounded-xl p-6 shadow-sm'>
-                <h2 className='text-xl font-medium mb-6 flex items-center gap-2 pb-4 border-b'>
+          <div className='grid gap-3'>
+            <div className='grid gap-3 lg:grid-cols-2'>
+              <section className='bg-card border rounded-xl p-4 shadow-sm'>
+                <h2 className='text-xl font-medium mb-4 flex items-center gap-2 pb-3 border-b'>
                   <HashIcon className='w-5 h-5 text-primary' />
                   Information
                 </h2>
                 <div className='grid gap-4 text-sm'>
                   <Field label='Coin ID' mono>
                     <Truncated
-                      value={coin.coin_id}
-                      href={`/coin/${coin.coin_id}`}
+                      value={coin.coinId}
+                      href={`/coin/${coin.coinId}`}
                     />
                   </Field>
                   <Field label='Parent Coin' mono>
                     <Truncated
-                      value={coin.coin.parent_coin_info}
-                      href={`/coin/${coin.coin.parent_coin_info}`}
+                      value={coin.parentCoinInfo}
+                      href={`/coin/${coin.parentCoinInfo}`}
                     />
                   </Field>
                   <Field label='Puzzle Hash' mono>
-                    <Truncated value={coin.coin.puzzle_hash} />
+                    <Truncated value={coin.puzzleHash} />
                   </Field>
                   {coin.hint && (
                     <Field label='Hint' mono>
@@ -164,22 +273,22 @@ export function Coin() {
                 </div>
               </section>
 
-              <section className='bg-card border rounded-xl p-6 shadow-sm'>
-                <h2 className='text-xl font-medium mb-6 flex items-center gap-2 pb-4 border-b'>
+              <section className='bg-card border rounded-xl p-4 shadow-sm'>
+                <h2 className='text-xl font-medium mb-4 flex items-center gap-2 pb-3 border-b'>
                   <LayersIcon className='w-5 h-5 text-primary' />
                   Asset Details
                 </h2>
                 <div className='grid gap-4 text-sm'>
                   <Field label='Asset Type'>
-                    <span className='px-2 py-1 rounded-md bg-primary/10 text-primary font-medium'>
+                    <span className='inline-block mt-1.5 px-2 py-1 rounded-md bg-primary/10 text-primary font-medium'>
                       {coin.type === 'unknown'
                         ? 'Unknown'
                         : coin.type === 'reward'
                           ? 'Reward'
                           : coin.type === 'cat'
                             ? 'CAT2'
-                            : coin.type === 'singleton'
-                              ? 'Singleton'
+                            : coin.type === 'vault'
+                              ? 'Vault'
                               : coin.type === 'nft'
                                 ? 'NFT1'
                                 : 'DID1'}
@@ -189,7 +298,7 @@ export function Coin() {
                     <div className='font-medium flex flex-wrap items-center gap-1.5 text-base'>
                       <span className='text-lg'>
                         {toDecimal(
-                          coin.coin.amount,
+                          coin.amount,
                           coin.type === 'cat'
                             ? Precision.Cat
                             : coin.type === 'unknown' || coin.type === 'reward'
@@ -211,8 +320,8 @@ export function Coin() {
               </section>
             </div>
 
-            <section className='bg-card border rounded-xl p-6 shadow-sm'>
-              <h2 className='text-xl font-medium mb-6 flex items-center gap-2 pb-4 border-b'>
+            <section className='bg-card border rounded-xl p-4 shadow-sm'>
+              <h2 className='text-xl font-medium mb-4 flex items-center gap-2 pb-3 border-b'>
                 <ClockIcon className='w-5 h-5 text-primary' />
                 Timeline
               </h2>
@@ -224,18 +333,17 @@ export function Coin() {
                   <div>
                     <div className='font-medium mb-1'>Created at Height</div>
                     <div className='flex items-center gap-2'>
-                      <ColoredLink href={`/block/${createdBlock?.header_hash}`}>
-                        {coin.created_height.toLocaleString()}
+                      <ColoredLink
+                        href={`/block/${createdBlock?.headerHash ? toHex(createdBlock.headerHash) : ''}`}
+                      >
+                        {coinRecord?.confirmedBlockIndex?.toLocaleString()}
                       </ColoredLink>
-                      {createdBlock?.transaction_info && (
+                      {createdBlock?.timestamp && (
                         <span className='text-muted-foreground'>
-                          {intlFormat(
-                            createdBlock.transaction_info.timestamp * 1000,
-                            {
-                              dateStyle: 'medium',
-                              timeStyle: 'short',
-                            },
-                          )}
+                          {intlFormat(Number(createdBlock.timestamp) * 1000, {
+                            dateStyle: 'medium',
+                            timeStyle: 'short',
+                          })}
                         </span>
                       )}
                     </div>
@@ -243,7 +351,7 @@ export function Coin() {
                 </div>
 
                 <div className='flex items-start gap-4'>
-                  {coin.spent_height ? (
+                  {coinRecord?.spentBlockIndex ? (
                     <>
                       <div className='w-8 h-8 rounded-full bg-blue-500/10 flex items-center justify-center flex-shrink-0'>
                         <ArrowUpCircleIcon className='w-5 h-5 text-blue-500' />
@@ -252,19 +360,16 @@ export function Coin() {
                         <div className='font-medium mb-1'>Spent at Height</div>
                         <div className='flex items-center gap-2'>
                           <ColoredLink
-                            href={`/block/${spentBlock?.header_hash}`}
+                            href={`/block/${spentBlock?.headerHash ? toHex(spentBlock.headerHash) : ''}`}
                           >
-                            {coin.spent_height.toLocaleString()}
+                            {coinRecord?.spentBlockIndex?.toLocaleString()}
                           </ColoredLink>
-                          {spentBlock?.transaction_info && (
+                          {spentBlock?.timestamp && (
                             <span className='text-muted-foreground'>
-                              {intlFormat(
-                                spentBlock.transaction_info.timestamp * 1000,
-                                {
-                                  dateStyle: 'medium',
-                                  timeStyle: 'short',
-                                },
-                              )}
+                              {intlFormat(Number(spentBlock.timestamp) * 1000, {
+                                dateStyle: 'medium',
+                                timeStyle: 'short',
+                              })}
                             </span>
                           )}
                         </div>
@@ -286,6 +391,8 @@ export function Coin() {
             </section>
           </div>
         )}
+
+        {coinSpend && <SpendViewer spend={coinSpend} />}
       </div>
     </Layout>
   );
@@ -298,7 +405,7 @@ interface FieldProps extends PropsWithChildren {
 
 function Field({ label, children, mono = false }: FieldProps) {
   return (
-    <div className='space-y-1.5'>
+    <div>
       <div className='text-muted-foreground font-medium'>{label}</div>
       <div className={`${mono ? 'font-mono' : ''}`}>{children}</div>
     </div>

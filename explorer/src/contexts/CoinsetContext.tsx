@@ -30,9 +30,9 @@ export function CoinsetProvider({ children }: { children: ReactNode }) {
     });
   }, [client]);
 
-  useEffect(() => {
-    const websocket = new WebSocket('wss://api.coinset.org/ws');
+  const [websocket, setWebsocket] = useState<WebSocket>(createWebsocket);
 
+  useEffect(() => {
     websocket.onmessage = (event) => {
       const message = JSON.parse(event.data);
       switch (message.type) {
@@ -42,14 +42,22 @@ export function CoinsetProvider({ children }: { children: ReactNode }) {
       }
     };
 
+    websocket.onclose = () => {
+      setWebsocket(createWebsocket());
+    };
+
     return () => {
       websocket.close();
     };
-  }, []);
+  }, [websocket]);
 
   return (
     <CoinsetContext.Provider value={{ client, peak }}>
       {children}
     </CoinsetContext.Provider>
   );
+}
+
+function createWebsocket() {
+  return new WebSocket('wss://api.coinset.org/ws');
 }

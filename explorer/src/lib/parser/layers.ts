@@ -199,6 +199,29 @@ export function parseLayer(puzzle: Puzzle): ParsedLayer {
       value: royaltyBasisPoints?.toString(),
       type: ArgType.NonCopiable,
     };
+  } else if (
+    bytesEqual(puzzle.modHash, Constants.p2SingletonOrDelayedPuzzleHashHash())
+  ) {
+    name = 'P2_SINGLETON_OR_DELAYED_PUZZLE_HASH';
+
+    const launcherId = arg(1)?.toAtom();
+    const secondsDelay = arg(3)?.toInt();
+    const delayedPuzzleHash = arg(4)?.toAtom();
+
+    args.launcher_id = {
+      value: launcherId && toAddress(toHex(launcherId)),
+      type: ArgType.CoinId,
+    };
+
+    args.seconds_delay = {
+      value: secondsDelay?.toString(),
+      type: ArgType.NonCopiable,
+    };
+
+    args.delayed_puzzle_hash = {
+      value: delayedPuzzleHash && `0x${toHex(delayedPuzzleHash)}`,
+      type: ArgType.Copiable,
+    };
   }
 
   return {
