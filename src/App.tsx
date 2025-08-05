@@ -1,5 +1,5 @@
 import {
-  createBrowserRouter,
+  createHashRouter,
   createRoutesFromElements,
   Route,
   RouterProvider,
@@ -13,7 +13,7 @@ import { Coin } from './pages/Coin';
 import { Home } from './pages/Home';
 import { Tools } from './pages/Tools';
 
-const router = createBrowserRouter(
+const router = createHashRouter(
   createRoutesFromElements(
     <>
       <Route path='/' element={<Home />} />
