@@ -161,7 +161,7 @@ function Block({ blockRecord }: BlockProps) {
               <LayersIcon className='w-4 h-4 text-muted-foreground' />
             )}
             <div className='text-lg font-medium'>
-              Block {blockRecord.height.toLocaleString()}
+              Block {blockRecord.height.toString()}
             </div>
           </div>
 

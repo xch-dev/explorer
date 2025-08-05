@@ -359,7 +359,7 @@ export function Coin() {
                       <ColoredLink
                         href={`/block/${createdBlock?.headerHash ? toHex(createdBlock.headerHash) : ''}`}
                       >
-                        {coinRecord?.confirmedBlockIndex?.toLocaleString()}
+                        {coinRecord?.confirmedBlockIndex?.toString()}
                       </ColoredLink>
                       {createdBlock?.timestamp && (
                         <span className='text-muted-foreground'>
@@ -385,7 +385,7 @@ export function Coin() {
                           <ColoredLink
                             href={`/block/${spentBlock?.headerHash ? toHex(spentBlock.headerHash) : ''}`}
                           >
-                            {coinRecord?.spentBlockIndex?.toLocaleString()}
+                            {coinRecord?.spentBlockIndex?.toString()}
                           </ColoredLink>
                           {spentBlock?.timestamp && (
                             <span className='text-muted-foreground'>

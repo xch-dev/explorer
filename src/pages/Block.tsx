@@ -70,8 +70,7 @@ export function Block() {
     <Layout>
       <div className='flex items-baseline gap-3 mb-2'>
         <h1 className='text-3xl font-semibold'>
-          Block{' '}
-          {block?.rewardChainBlock.height.toLocaleString() ?? 'loading...'}
+          Block {block?.rewardChainBlock.height.toString() ?? 'loading...'}
         </h1>
         {timestamp && (
           <div className='text-lg text-muted-foreground'>
