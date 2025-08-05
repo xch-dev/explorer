@@ -51,7 +51,7 @@ export function parseCoinSpend(
         condition.parseAssertMyBirthHeight() ??
         condition.parseAssertMyBirthSeconds() ??
         condition.parseAssertEphemeral() ??
-        condition.parseAggSigPuzzle() ??
+        condition.parseAggSigMe() ??
         condition.parseAggSigParent() ??
         condition.parseAggSigParentAmount() ??
         condition.parseAggSigParentPuzzle() ??

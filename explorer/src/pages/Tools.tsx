@@ -1,13 +1,15 @@
 import { DropdownSelector } from '@/components/DropdownSelector';
+import { External } from '@/components/External';
 import { Layout } from '@/components/Layout';
 import { Truncated } from '@/components/Truncated';
+import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { Textarea } from '@/components/ui/textarea';
 import { Nft } from '@/contexts/MintGardenContext';
 import { useDexie } from '@/hooks/useDexie';
 import { useMintGarden } from '@/hooks/useMintGarden';
 import { getCoinSpends } from '@/lib/api';
 import { Precision, toDecimal } from '@/lib/conversions';
-import { parseJson } from '@/lib/json';
+import { parseJson, stringify } from '@/lib/json';
 import {
   AssetType,
   ConditionType,
@@ -25,7 +27,7 @@ import {
   Signature,
   SpendBundle,
 } from 'chia-wallet-sdk-wasm';
-import { CoinsIcon, TriangleAlertIcon } from 'lucide-react';
+import { CoinsIcon, InfoIcon, TriangleAlertIcon } from 'lucide-react';
 import { useEffect, useMemo, useState } from 'react';
 import { useParams } from 'react-router-dom';
 import { useLocalStorage } from 'usehooks-ts';
@@ -34,14 +36,15 @@ export function Tools() {
   const { hash } = useParams();
 
   const [value, setValue] = useLocalStorage('tools-bundle', '');
+  const [modified, setModified] = useState(false);
 
   useEffect(() => {
-    if (!hash) return;
+    if (!hash || modified) return;
 
     getCoinSpends(hash).then((coinSpends) => {
-      setValue(JSON.stringify(coinSpends));
+      setValue(stringify(coinSpends));
     });
-  }, [hash, setValue]);
+  }, [hash, modified, setValue]);
 
   const parsedSpendBundle = useMemo(() => {
     if (!value) return null;
@@ -78,8 +81,26 @@ export function Tools() {
         placeholder='Enter spend bundle or offer file'
         className='h-30'
         value={value}
-        onChange={(e) => setValue(e.target.value)}
+        onChange={(e) => {
+          setValue(e.target.value);
+          setModified(true);
+        }}
       />
+
+      {!!hash && !modified && (
+        <Alert className='mt-4'>
+          <InfoIcon />
+          <AlertTitle>Cost may not match block</AlertTitle>
+          <AlertDescription>
+            <p>
+              The spend bundle cost may not match the block's cost, due to{' '}
+              <External href='https://chialisp.com/clvm/#back-references'>
+                back-ref compression
+              </External>
+            </p>
+          </AlertDescription>
+        </Alert>
+      )}
 
       {parsedSpendBundle && <BundleViewer bundle={parsedSpendBundle} />}
     </Layout>
@@ -117,8 +138,6 @@ function BundleViewer({ bundle }: BundleViewerProps) {
     const nft = spend.assetType === AssetType.Nft ? nfts[spend.assetId] : null;
     const token =
       spend.assetType === AssetType.Token ? getToken(spend.assetId) : null;
-
-    console.log(nft);
 
     return (
       <div className='flex items-center gap-2 w-full'>

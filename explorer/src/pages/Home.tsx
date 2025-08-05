@@ -5,23 +5,41 @@ import {
   TooltipContent,
   TooltipTrigger,
 } from '@/components/ui/tooltip';
-import { BlockRecord, getBlock, getBlockByHeight, getBlocks } from '@/lib/api';
+import { useCoinset } from '@/hooks/useCoinset';
 import { MAX_BLOCK_COST } from '@/lib/constants';
-import { truncateHash } from '@/lib/conversions';
+import { stripHex, truncateHash } from '@/lib/conversions';
+import {
+  BlockRecord,
+  Clvm,
+  fromHex,
+  FullBlock,
+  toHex,
+} from 'chia-wallet-sdk-wasm';
 import { intlFormat, intlFormatDistance } from 'date-fns';
 import { CoinsIcon, HashIcon, LayersIcon } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 
 export function Home() {
-  const [blocks, setBlocks] = useState<BlockRecord[]>([]);
+  const { client, peak } = useCoinset();
+
+  const [blockRecords, setBlockRecords] = useState<BlockRecord[]>([]);
   const [search, setSearch] = useState('');
   const [searchResult, setSearchResult] = useState<BlockRecord | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    getBlocks().then(setBlocks);
-  }, []);
+    if (!peak) return;
+
+    client.getBlockRecords(peak - 15, peak).then((data) => {
+      if (data.error) {
+        console.error(data.error);
+        return;
+      }
+
+      setBlockRecords(data.blockRecords ?? []);
+    });
+  }, [client, peak]);
 
   const handleSearch = async (value: string) => {
     setSearch(value);
@@ -38,10 +56,22 @@ export function Home() {
       // Try parsing as block height first
       const height = parseInt(value);
       if (!isNaN(height) && height < 2 ** 32) {
-        block = await getBlockByHeight(height);
+        const result = await client.getBlockRecordByHeight(height);
+
+        if (result.error) {
+          console.error(result.error);
+        }
+
+        block = result.blockRecord ?? null;
       } else {
         // If not a number, try as header hash
-        block = await getBlock(value);
+        const result = await client.getBlockRecord(fromHex(stripHex(value)));
+
+        if (result.error) {
+          console.error(result.error);
+        }
+
+        block = result.blockRecord ?? null;
       }
 
       if (block) {
@@ -54,7 +84,7 @@ export function Home() {
     }
   };
 
-  const displayedBlocks = searchResult ? [searchResult] : blocks;
+  const displayedBlocks = searchResult ? [searchResult] : blockRecords;
 
   return (
     <Layout>
@@ -74,8 +104,8 @@ export function Home() {
       </div>
 
       <div className='grid gap-2'>
-        {displayedBlocks.map((block) => (
-          <Block key={block.height} block={block} />
+        {displayedBlocks.map((blockRecord) => (
+          <Block key={blockRecord.height} blockRecord={blockRecord} />
         ))}
       </div>
     </Layout>
@@ -83,35 +113,85 @@ export function Home() {
 }
 
 interface BlockProps {
-  block: BlockRecord;
+  blockRecord: BlockRecord;
 }
 
-function Block({ block }: BlockProps) {
-  const timestamp = block.transaction_info
-    ? new Date(block.transaction_info.timestamp * 1000)
+function Block({ blockRecord }: BlockProps) {
+  const { client } = useCoinset();
+
+  const [block, setBlock] = useState<FullBlock | null>(null);
+  const [additions, setAdditions] = useState(0);
+  const [removals, setRemovals] = useState(0);
+
+  useEffect(() => {
+    client.getBlock(blockRecord.headerHash).then((data) => {
+      if (data.error) {
+        console.error(data.error);
+      }
+
+      setBlock(data.block ?? null);
+    });
+
+    client.getBlockSpends(blockRecord.headerHash).then((data) => {
+      if (data.error) {
+        console.error(data.error);
+      }
+
+      const blockSpends = data.blockSpends ?? [];
+
+      const clvm = new Clvm();
+
+      setAdditions(
+        blockSpends.reduce((acc, spend) => {
+          const puzzle = clvm.deserialize(spend.puzzleReveal);
+          const solution = clvm.deserialize(spend.solution);
+          const conditions =
+            puzzle
+              .run(solution, BigInt(MAX_BLOCK_COST), false)
+              .value.toList() ?? [];
+
+          let result = acc;
+
+          for (const condition of conditions) {
+            if (condition.parseCreateCoin()) {
+              result += 1;
+            }
+          }
+
+          return result;
+        }, 0),
+      );
+      setRemovals(blockSpends.length);
+    });
+  }, [blockRecord, client]);
+
+  const timestamp = block?.foliageTransactionBlock
+    ? new Date(Number(block.foliageTransactionBlock.timestamp) * 1000)
     : null;
 
   return (
     <Link
-      to={`/block/${block.header_hash}`}
+      to={`/block/${toHex(blockRecord.headerHash)}`}
       className='p-4 bg-card border rounded-lg hover:bg-accent/75 transition-colors'
     >
       <div className='flex items-start justify-between'>
         <div className='space-y-2'>
           <div className='flex items-center gap-2'>
-            {block.transaction_info ? (
+            {block?.foliageTransactionBlock ? (
               <CoinsIcon className='w-4 h-4 text-green-500' />
             ) : (
               <LayersIcon className='w-4 h-4 text-muted-foreground' />
             )}
             <div className='text-lg font-medium'>
-              Block {block.height.toLocaleString()}
+              Block {blockRecord.height.toLocaleString()}
             </div>
           </div>
 
           <div className='flex items-center gap-2 text-sm text-muted-foreground'>
             <HashIcon className='w-4 h-4' />
-            <div className='font-mono'>{truncateHash(block.header_hash)}</div>
+            <div className='font-mono'>
+              {truncateHash(toHex(blockRecord.headerHash))}
+            </div>
           </div>
         </div>
 
@@ -131,20 +211,16 @@ function Block({ block }: BlockProps) {
                   })}
                 </TooltipContent>
               </Tooltip>
-              {block.transaction_info && (
+              {block?.transactionsInfo && (
                 <div className='text-sm mt-1'>
-                  <span className='text-green-600'>
-                    +{block.transaction_info.additions}
-                  </span>
+                  <span className='text-green-600'>+{additions}</span>
                   <span className='text-muted-foreground'> / </span>
-                  <span className='text-red-500'>
-                    -{block.transaction_info.removals}
-                  </span>
+                  <span className='text-red-500'>-{removals}</span>
                   <span className='text-muted-foreground'>
                     {' '}
                     coins (
                     {(
-                      block.transaction_info.cost / MAX_BLOCK_COST
+                      Number(block.transactionsInfo.cost) / MAX_BLOCK_COST
                     ).toLocaleString(undefined, {
                       style: 'percent',
                       maximumFractionDigits: 2,

@@ -4,6 +4,7 @@ import {
   Route,
   RouterProvider,
 } from 'react-router-dom';
+import { CoinsetProvider } from './contexts/CoinsetContext';
 import { DarkModeProvider } from './contexts/DarkModeContext';
 import { DexieProvider } from './contexts/DexieContext';
 import { MintGardenProvider } from './contexts/MintGardenContext';
@@ -27,11 +28,13 @@ const router = createBrowserRouter(
 export default function App() {
   return (
     <DarkModeProvider>
-      <DexieProvider>
-        <MintGardenProvider>
-          <RouterProvider router={router} />
-        </MintGardenProvider>
-      </DexieProvider>
+      <CoinsetProvider>
+        <DexieProvider>
+          <MintGardenProvider>
+            <RouterProvider router={router} />
+          </MintGardenProvider>
+        </DexieProvider>
+      </CoinsetProvider>
     </DarkModeProvider>
   );
 }
