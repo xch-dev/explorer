@@ -88,6 +88,29 @@ export function Coin() {
 
     if (coinRecord.coinbase) {
       setCoin(parseCoin(coinRecord.coin, CoinType.Reward, 'xch'));
+
+      client.getPuzzleAndSolution(coinRecord.coin.coinId()).then((spend) => {
+        if (!spend.coinSolution) {
+          return;
+        }
+
+        const parsed = parseSpendBundle(
+          new SpendBundle(
+            [
+              new CoinSpend(
+                coinRecord.coin,
+                spend.coinSolution.puzzleReveal,
+                spend.coinSolution.solution,
+              ),
+            ],
+            Signature.infinity(),
+          ),
+          false,
+        );
+
+        setCoin(parsed.coinSpends[0].coin);
+        setCoinSpend(parsed.coinSpends[0]);
+      });
     } else {
       Promise.all([
         client.getCoinRecordByName(coinRecord.coin.parentCoinInfo),
