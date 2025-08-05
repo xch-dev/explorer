@@ -1,5 +1,5 @@
 import { useDarkMode } from '@/hooks/useDarkMode';
-import { MoonIcon, PencilRulerIcon, SunIcon } from 'lucide-react';
+import { BookOpenIcon, MoonIcon, PencilRulerIcon, SunIcon } from 'lucide-react';
 import { Link, useNavigate } from 'react-router-dom';
 import { Button } from './ui/button';
 
@@ -16,12 +16,21 @@ export function Nav() {
 
       <div className='flex items-center gap-2'>
         <Button
+          onClick={() => (window.location.href = 'https://docs.xch.dev')}
+          variant='outline'
+          className='cursor-pointer'
+        >
+          <BookOpenIcon className='w-4 h-4' />
+          <span className='hidden md:inline'>Docs</span>
+        </Button>
+
+        <Button
           onClick={() => navigate('/tools')}
           variant='outline'
           className='cursor-pointer'
         >
           <PencilRulerIcon className='w-4 h-4' />
-          Tools
+          <span className='hidden md:inline'>Tools</span>
         </Button>
 
         <Button onClick={toggle} variant='outline'>
@@ -30,7 +39,7 @@ export function Nav() {
           ) : (
             <MoonIcon className='w-4 h-4' />
           )}
-          Theme
+          <span className='hidden md:inline'>Theme</span>
         </Button>
       </div>
     </div>
