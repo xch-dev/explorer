@@ -209,7 +209,7 @@ export function parseLayer(puzzle: Puzzle): ParsedLayer {
     const delayedPuzzleHash = arg(4)?.toAtom();
 
     args.launcher_id = {
-      value: launcherId && toAddress(toHex(launcherId)),
+      value: launcherId && `0x${toHex(launcherId)}`,
       type: ArgType.CoinId,
     };
 
