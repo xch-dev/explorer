@@ -1,10 +1,14 @@
+import type { Network } from '@/contexts/CoinsetContext';
 import { useDarkMode } from '@/hooks/useDarkMode';
+import { useCoinset } from '@/hooks/useCoinset';
 import { BookOpenIcon, MoonIcon, PencilRulerIcon, SunIcon } from 'lucide-react';
 import { Link, useNavigate } from 'react-router-dom';
 import { Button } from './ui/button';
+import { Select, SelectContent, SelectItem, SelectTrigger } from './ui/select';
 
 export function Nav() {
   const { dark, toggle } = useDarkMode();
+  const { network, setNetwork } = useCoinset();
 
   const navigate = useNavigate();
 
@@ -15,6 +19,27 @@ export function Nav() {
       </Link>
 
       <div className='flex items-center gap-2'>
+        <Select
+          value={network}
+          onValueChange={(value) => setNetwork(value as Network)}
+        >
+          <SelectTrigger
+            className='w-14 px-2 sm:w-[130px] sm:px-3'
+            aria-label='Select network'
+          >
+            <span className='hidden sm:inline'>
+              {network === 'testnet11' ? 'Testnet11' : 'Mainnet'}
+            </span>
+            <span className='sm:hidden'>
+              {network === 'testnet11' ? 'T11' : 'M'}
+            </span>
+          </SelectTrigger>
+          <SelectContent align='end'>
+            <SelectItem value='mainnet'>Mainnet</SelectItem>
+            <SelectItem value='testnet11'>Testnet11</SelectItem>
+          </SelectContent>
+        </Select>
+
         <Button
           onClick={() => (window.location.href = 'https://docs.xch.dev')}
           variant='outline'
