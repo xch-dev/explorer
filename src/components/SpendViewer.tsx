@@ -6,6 +6,7 @@ import {
 } from '@/lib/parser';
 import { ArgType } from '@/lib/parser/arg';
 import { cn } from '@/lib/utils';
+import { intlFormat } from 'date-fns';
 import { TriangleAlertIcon } from 'lucide-react';
 import { Truncated } from './Truncated';
 
@@ -157,6 +158,27 @@ interface ConditionViewerProps {
   condition: ParsedCondition;
 }
 
+function localDatetime(condition: ParsedCondition, key: string, value: string) {
+  const isAbsoluteTimestamp =
+    key === 'seconds' &&
+    (condition.name === 'ASSERT_SECONDS_ABSOLUTE' ||
+      condition.name === 'ASSERT_BEFORE_SECONDS_ABSOLUTE');
+
+  if (!isAbsoluteTimestamp) return null;
+
+  const timestamp = Number(value);
+  const date = new Date(timestamp * 1000);
+
+  if (!Number.isSafeInteger(timestamp) || Number.isNaN(date.getTime())) {
+    return null;
+  }
+
+  return intlFormat(date, {
+    dateStyle: 'medium',
+    timeStyle: 'medium',
+  });
+}
+
 function ConditionViewer({ condition }: ConditionViewerProps) {
   const getBorderColor = () => {
     switch (condition.type) {
@@ -193,29 +215,36 @@ function ConditionViewer({ condition }: ConditionViewerProps) {
         </div>
       )}
       <div className='space-y-1 text-xs'>
-        {Object.entries(condition.args).map(([key, value]) => (
-          <div
-            key={key}
-            className='flex flex-col sm:flex-row sm:items-start gap-1 sm:gap-2'
-          >
-            <div className='text-muted-foreground sm:min-w-24'>{key}:</div>
-            <div className='flex-1 break-all'>
-              {value.type === ArgType.Copiable ||
-              value.type === ArgType.CoinId ? (
-                <Truncated
-                  value={value.value}
-                  href={
-                    value.type === ArgType.CoinId
-                      ? `/coin/${value.value}`
-                      : undefined
-                  }
-                />
-              ) : (
-                <div>{value.value}</div>
-              )}
+        {Object.entries(condition.args).map(([key, value]) => {
+          const datetime = localDatetime(condition, key, value.value);
+
+          return (
+            <div
+              key={key}
+              className='flex flex-col sm:flex-row sm:items-start gap-1 sm:gap-2'
+            >
+              <div className='text-muted-foreground sm:min-w-24'>{key}:</div>
+              <div className='flex flex-1 flex-wrap gap-x-2 break-all'>
+                {value.type === ArgType.Copiable ||
+                value.type === ArgType.CoinId ? (
+                  <Truncated
+                    value={value.value}
+                    href={
+                      value.type === ArgType.CoinId
+                        ? `/coin/${value.value}`
+                        : undefined
+                    }
+                  />
+                ) : (
+                  <div>{value.value}</div>
+                )}
+                {datetime && (
+                  <div className='text-muted-foreground'>{datetime}</div>
+                )}
+              </div>
             </div>
-          </div>
-        ))}
+          );
+        })}
       </div>
     </div>
   );
